@@ -1,0 +1,26 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: alfred
+      POSTGRES_PASSWORD: alfred
+      POSTGRES_DB: alfred
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  api:
+    build: .
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql+psycopg2://alfred:alfred@db:5432/alfred
+      SECRET_KEY: dev-secret
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - .:/app
+volumes:
+  pgdata: {}
