@@ -13,6 +13,11 @@ class Settings(BaseSettings):
         description="Database URL",
     )
     log_level: str = Field("INFO")
+    ai_provider_backend: str = Field(
+        "mock",
+        description="AI provider backend to use (mock or income)",
+        alias="AI_PROVIDER_BACKEND",
+    )
 
     class Config:
         env_file = ".env"
