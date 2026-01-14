@@ -22,6 +22,7 @@ def list_notifications(seen: bool | None = None, current_user: User = Depends(ge
             "entity_id": str(n.entity_id),
             "seen": n.seen,
             "created_at": n.created_at,
+            "message": n.message,
         }
         for n in items
     ]

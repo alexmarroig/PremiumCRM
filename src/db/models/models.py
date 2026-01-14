@@ -31,9 +31,16 @@ direction_enum = Enum("inbound", "outbound", name="message_direction")
 task_status_enum = Enum("todo", "doing", "done", name="task_status")
 task_priority_enum = Enum("low", "medium", "high", name="task_priority")
 notification_type_enum = Enum(
-    "urgent_message", "overdue_task", "stalled_lead", "rule_match", name="notification_type"
+    "urgent_message",
+    "overdue_task",
+    "stalled_lead",
+    "rule_match",
+    "onboarding",
+    name="notification_type",
 )
-notification_entity_enum = Enum("conversation", "task", "rule", name="notification_entity")
+notification_entity_enum = Enum(
+    "conversation", "task", "rule", "system", name="notification_entity"
+)
 
 
 class User(Base):
@@ -219,6 +226,7 @@ class Notification(Base):
     entity_type: Mapped[str] = mapped_column(notification_entity_enum, nullable=False)
     entity_id: Mapped[uuid.UUID] = mapped_column()
     seen: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    message: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("User", back_populates="notifications")
 
