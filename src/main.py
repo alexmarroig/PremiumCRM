@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import get_settings
 from core.errors import setup_exception_handlers
 from core.logging import setup_logging
+from services.ai import get_ai_provider
 from services.automation.scheduler import create_scheduler
 from api.routers import (
     ai,
@@ -38,6 +39,7 @@ app.add_middleware(
 def startup_event():
     scheduler = create_scheduler()
     scheduler.start()
+    app.state.ai_provider = get_ai_provider()
 
 
 @app.get("/health")

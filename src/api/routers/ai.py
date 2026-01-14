@@ -1,14 +1,20 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.deps import get_current_user
 from db.models import Conversation, User
 from db.session import get_db
-from services.ai.mock_provider import MockAIProvider
+from services.ai import AIProvider, get_ai_provider
 
 router = APIRouter(prefix="/ai", tags=["ai"])
-ai_provider = MockAIProvider()
+
+
+def get_configured_ai_provider(request: Request) -> AIProvider:
+    provider = getattr(request.app.state, "ai_provider", None)
+    if provider is not None:
+        return provider
+    return get_ai_provider()
 
 
 class MessageBody(BaseModel):
@@ -17,7 +23,12 @@ class MessageBody(BaseModel):
 
 
 @router.post("/classify-message")
-def classify_message(payload: MessageBody, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def classify_message(
+    payload: MessageBody,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    ai_provider: AIProvider = Depends(get_configured_ai_provider),
+):
     convo = None
     history = []
     if payload.conversation_id:
@@ -33,15 +44,27 @@ def classify_message(payload: MessageBody, current_user: User = Depends(get_curr
 
 
 @router.post("/suggest-reply")
-def suggest_reply(payload: MessageBody, current_user: User = Depends(get_current_user)):
+def suggest_reply(
+    payload: MessageBody,
+    current_user: User = Depends(get_current_user),
+    ai_provider: AIProvider = Depends(get_configured_ai_provider),
+):
     return ai_provider.suggest_reply(payload.message)
 
 
 @router.post("/suggest-price")
-def suggest_price(payload: MessageBody, current_user: User = Depends(get_current_user)):
+def suggest_price(
+    payload: MessageBody,
+    current_user: User = Depends(get_current_user),
+    ai_provider: AIProvider = Depends(get_configured_ai_provider),
+):
     return ai_provider.suggest_price(payload.message)
 
 
 @router.post("/suggest-followup")
-def suggest_followup(payload: MessageBody, current_user: User = Depends(get_current_user)):
+def suggest_followup(
+    payload: MessageBody,
+    current_user: User = Depends(get_current_user),
+    ai_provider: AIProvider = Depends(get_configured_ai_provider),
+):
     return ai_provider.suggest_followup(payload.message)

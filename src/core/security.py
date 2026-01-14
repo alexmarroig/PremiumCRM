@@ -6,7 +6,7 @@ from passlib.context import CryptContext
 
 from .config import get_settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt", "bcrypt_sha256", "pbkdf2_sha256"], deprecated="auto")
 
 
 class TokenError(Exception):
@@ -18,7 +18,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    for scheme in ("bcrypt", "bcrypt_sha256", "pbkdf2_sha256"):
+        try:
+            return pwd_context.hash(password, scheme=scheme)
+        except ValueError:
+            continue
+    raise ValueError("Unable to hash password with available schemes")
 
 
 def create_token(subject: str, expires_delta: timedelta, token_type: str) -> str:

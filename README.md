@@ -26,6 +26,12 @@ docker-compose exec api alembic upgrade head
 docker-compose exec api python scripts/seed_demo.py
 ```
 
+### AI provider modes
+- `AI_PROVIDER_BACKEND=mock` (default): heuristic-only responses without external signals.
+- `AI_PROVIDER_BACKEND=income`: uses `IncomeAwareAIProvider` to blend message tone with mocked income/size signals to tailor classifications and price guidance.
+
+When using the income-aware mode, ensure you capture user consent for financial inference and surface how signals are combined. The provider intentionally excludes biometric/location data and expects upstream systems to honor opt-in/out preferences.
+
 API will be available at `http://localhost:8000/api/v1`. OpenAPI docs at `/api/v1/openapi.json`.
 
 ## Common commands
