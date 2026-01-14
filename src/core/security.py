@@ -6,7 +6,9 @@ from passlib.context import CryptContext
 
 from .config import get_settings
 
-pwd_context = CryptContext(schemes=["bcrypt", "bcrypt_sha256", "pbkdf2_sha256"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"], default="pbkdf2_sha256", deprecated="auto"
+)
 
 
 class TokenError(Exception):

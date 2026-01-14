@@ -56,7 +56,15 @@ curl -H "Authorization: Bearer <access_token>" http://localhost:8000/api/v1/conv
 
 # Ingest webhook (email example)
 curl -X POST http://localhost:8000/api/v1/webhooks/email -H "Authorization: Bearer <access_token>" -H "Content-Type: application/json" -d '{"message_id":"123","from":"customer@example.com","from_name":"Customer","body":"Need pricing","sent_at":"2024-05-01T12:00:00Z"}'
+
+# Fetch onboarding notification (returned right after first login)
+curl -H "Authorization: Bearer <access_token>" http://localhost:8000/api/v1/notifications | jq
 ```
+
+## Onboarding
+- No primeiro token emitido (registro ou login inicial) o backend cria uma notificação de boas-vindas atrelada ao usuário.
+- Essa notificação é do tipo `onboarding`, possui `entity_type` `system` e inclui uma mensagem explicando que tokens e integrações básicas (webhooks, notificações automáticas) já estão configurados.
+- O frontend deve chamar `/api/v1/notifications` logo após autenticação e exibir essa mensagem imediatamente ao usuário.
 
 ## Tests
 Run pytest locally or in the container: `make test`.
