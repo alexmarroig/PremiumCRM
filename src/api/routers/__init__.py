@@ -1,4 +1,20 @@
-from . import ai, auth, channels, contacts, conversations, flows, me, messages, notifications, rules, tasks, webhooks
+from . import (
+    ai,
+    auth,
+    channels,
+    contacts,
+    conversations,
+    flows,
+    internal_comments,
+    leads,
+    me,
+    messages,
+    notifications,
+    rules,
+    search,
+    tasks,
+    webhooks,
+)
 
 __all__ = [
     "ai",
@@ -7,10 +23,13 @@ __all__ = [
     "contacts",
     "conversations",
     "flows",
+    "internal_comments",
+    "leads",
     "me",
     "messages",
     "notifications",
     "rules",
+    "search",
     "tasks",
     "webhooks",
 ]

@@ -1,0 +1,19 @@
+{
+  "id": "evt_test_webhook",
+  "object": "event",
+  "type": "customer.subscription.updated",
+  "data": {
+    "object": {
+      "customer": "cus_test",
+      "items": {
+        "data": [
+          {
+            "price": {
+              "metadata": { "plan": "growth" }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

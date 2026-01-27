@@ -1,0 +1,32 @@
+{
+  "info": {
+    "name": "Whisper Inbox AI Enterprise",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Get Conversations",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/teams/{{teamId}}/conversations",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "teams", "{{teamId}}", "conversations"]
+        }
+      }
+    },
+    {
+      "name": "AI Summary",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": {
+          "raw": "{{baseUrl}}/api/ai/summary/{{conversationId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "ai", "summary", "{{conversationId}}"]
+        }
+      }
+    }
+  ]
+}

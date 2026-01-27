@@ -22,7 +22,7 @@ class MockAIProvider(AIProvider):
 
     def suggest_reply(self, message: str) -> Dict[str, Any]:
         return {
-            "reply": "Thanks for reaching out! Can you share a bit more so I can help?",
+            "reply": "Obrigado pelo contato! Pode compartilhar mais detalhes para eu ajudar?",
             "confidence": 0.62,
         }
 
@@ -34,15 +34,53 @@ class MockAIProvider(AIProvider):
             "min_price": base_min,
             "max_price": base_max,
             "confidence": 0.55,
-            "rationale": ["Based on similar negotiations", "No visual data used"],
-            "questions_to_user": ["Any existing discounts?", "Target close date?"],
+            "rationale": ["Baseado em negociações similares", "Nenhum dado visual foi usado"],
+            "questions_to_user": ["Há descontos existentes?", "Qual a data alvo de fechamento?"],
         }
 
     def suggest_followup(self, message: str) -> Dict[str, Any]:
         return {
             "actions": [
-                "Send availability for a quick call",
-                "Share one-pager about offering",
+                "Enviar horários para uma conversa rápida",
+                "Compartilhar um resumo da oferta",
             ],
-            "timing": "within 1 day",
+            "timing": "em até 1 dia",
+        }
+
+    def summarize_conversation(self, messages: List[str]) -> Dict[str, Any]:
+        summary = "Resumo automático indisponível."
+        if messages:
+            summary = f"Conversa ativa com lead. Última mensagem: \"{messages[-1][:120]}\"."
+        return {
+            "summary": summary,
+            "suggestions": [
+                "Responder com confirmação dos próximos passos.",
+                "Enviar proposta rápida.",
+                "Perguntar sobre prazo e orçamento.",
+            ],
+        }
+
+    def create_flow_from_prompt(self, prompt: str) -> Dict[str, Any]:
+        return {
+            "name": "Fluxo Alfred",
+            "description": f"Fluxo criado a partir do prompt: {prompt[:140]}",
+            "compiled_json": {
+                "trigger": "lead_message",
+                "condition": prompt,
+                "response": "Vamos conversar sobre sua necessidade. Posso enviar opções?",
+            },
+        }
+
+    def transcribe_audio(self, audio_base64: str) -> Dict[str, Any]:
+        return {
+            "transcription": "Transcrição simulada do áudio.",
+            "language": "pt-BR",
+            "confidence": 0.4,
+        }
+
+    def synthesize_speech(self, text: str) -> Dict[str, Any]:
+        return {
+            "audio_base64": "",
+            "voice": "pt-BR-standard",
+            "message": "Áudio sintetizado (simulado).",
         }
