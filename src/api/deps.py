@@ -29,6 +29,15 @@ def get_current_user(
     return user
 
 
+def require_roles(*roles: str):
+    def dependency(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+        return current_user
+
+    return dependency
+
+
 def create_access_refresh_tokens(user_id: str) -> dict:
     settings = get_settings()
     access = create_token(

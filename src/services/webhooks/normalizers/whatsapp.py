@@ -6,5 +6,6 @@ def normalize(payload: dict) -> dict:
         "name": payload.get("name"),
         "avatar_url": payload.get("avatar"),
         "body": payload.get("message"),
+        "audio_base64": payload.get("audio_base64") or payload.get("audio"),
         "timestamp": payload.get("timestamp"),
     }

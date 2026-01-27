@@ -38,16 +38,16 @@ class IncomeAwareAIProvider(AIProvider):
         }
 
     def suggest_reply(self, message: str) -> Dict[str, Any]:
-        base_reply = "Thanks for reaching out! I can tailor options to your budget and goals."
+        base_reply = "Obrigado pelo contato! Posso adaptar as opções ao seu orçamento e objetivos."
         lowered = message.lower()
         if "budget" in lowered or "discount" in lowered:
             base_reply = (
-                "Thanks for sharing your budget focus. I can outline a lean option and a premium option so "
-                "you can choose the best fit."
+                "Obrigado por compartilhar o foco em orçamento. Posso apresentar uma opção enxuta e outra "
+                "mais completa para você escolher o melhor custo-benefício."
             )
         elif "enterprise" in lowered or "annual" in lowered:
             base_reply = (
-                "Great to hear about your long-term plans. I'll send a bundled quote with savings for annual terms."
+                "Ótimo saber dos seus planos de longo prazo. Vou enviar uma proposta com economia no plano anual."
             )
 
         return {
@@ -79,9 +79,9 @@ class IncomeAwareAIProvider(AIProvider):
             max_price = round(midpoint * 1.1)
 
         rationale = [
-            f"Income band '{income_band}' suggests a {int(multiplier * 100)}% adjustment",
-            "No biometric or location data used",
-            "Affordability score considers discounts in the request",
+            f"Faixa de renda '{income_band}' sugere ajuste de {int(multiplier * 100)}%",
+            "Nenhum dado biométrico ou de localização foi usado",
+            "Score de acessibilidade considera descontos pedidos",
         ]
 
         return {
@@ -93,23 +93,62 @@ class IncomeAwareAIProvider(AIProvider):
             "affordability_score": round(affordability_score, 2),
             "rationale": rationale,
             "questions_to_user": [
-                "Do you prefer monthly or annual billing?",
-                "Any compliance or onboarding constraints we should factor in?",
+                "Você prefere cobrança mensal ou anual?",
+                "Há alguma exigência de compliance ou onboarding a considerar?",
             ],
             "signals_used": signals,
         }
 
     def suggest_followup(self, message: str) -> Dict[str, Any]:
         signals = self.external_signal_fetcher(message)
-        followup_actions = ["Send availability for a quick call", "Share pricing tiers overview"]
+        followup_actions = ["Enviar horários para uma conversa rápida", "Compartilhar visão geral dos planos"]
         if signals.get("income_band") == "low":
-            followup_actions.append("Offer starter bundle with limited seats")
+            followup_actions.append("Oferecer pacote inicial com poucos usuários")
         elif signals.get("income_band") == "high":
-            followup_actions.append("Propose premium onboarding package")
+            followup_actions.append("Propor pacote premium de onboarding")
 
         return {
             "actions": followup_actions,
-            "timing": "within 1 day" if "urgent" in message.lower() else "within 2 days",
+            "timing": "em até 1 dia" if "urgent" in message.lower() else "em até 2 dias",
+        }
+
+    def summarize_conversation(self, messages: List[str]) -> Dict[str, Any]:
+        summary = "Resumo indisponível, poucas mensagens."
+        if messages:
+            last = messages[-1].strip()
+            summary = f"Lead demonstrou interesse e a última mensagem foi: \"{last[:120]}\"."
+        suggestions = [
+            "Confirmar necessidade principal do lead.",
+            "Agendar uma conversa rápida para alinhamento.",
+            "Enviar proposta resumida com próximos passos.",
+        ]
+        return {"summary": summary, "suggestions": suggestions}
+
+    def create_flow_from_prompt(self, prompt: str) -> Dict[str, Any]:
+        compiled = {
+            "trigger": "lead_message",
+            "condition": prompt,
+            "response": "Entendi! Posso explicar opções e condições especiais. Quer detalhes?",
+            "channel": "whatsapp",
+        }
+        return {
+            "name": "Fluxo Alfred",
+            "description": f"Fluxo criado para: {prompt[:140]}",
+            "compiled_json": compiled,
+        }
+
+    def transcribe_audio(self, audio_base64: str) -> Dict[str, Any]:
+        return {
+            "transcription": "Transcrição simulada do áudio recebido.",
+            "language": "pt-BR",
+            "confidence": 0.51,
+        }
+
+    def synthesize_speech(self, text: str) -> Dict[str, Any]:
+        return {
+            "audio_base64": "",
+            "voice": "pt-BR-female",
+            "message": "Síntese simulada pronta para envio.",
         }
 
     def _mock_external_signals(self, message: str) -> Dict[str, Any]:

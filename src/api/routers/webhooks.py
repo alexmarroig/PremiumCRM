@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 from api.deps import get_current_user
 from db.models import AIEvent, Channel, Contact, ContactSettings, Conversation, Message, Notification, Rule, Task, User
 from db.session import get_db
-from services.ai.mock_provider import MockAIProvider
+from services.ai import get_ai_provider
 from services.automation.rules_engine import evaluate_rule
 from services.webhooks.normalizers import email, instagram, messenger, whatsapp
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
-ai_provider = MockAIProvider()
+ai_provider = get_ai_provider()
 
 NORMALIZERS: Dict[str, Callable[[dict], dict]] = {
     "whatsapp": whatsapp.normalize,
@@ -79,10 +79,24 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
     contact = get_or_create_contact(db, current_user.id, normalized)
     conversation = get_or_create_conversation(db, current_user.id, contact.id, channel.id)
 
+    body = normalized.get("body") or ""
+    audio_base64 = normalized.get("audio_base64")
+    if audio_base64:
+        transcription = ai_provider.transcribe_audio(audio_base64)
+        body = transcription.get("transcription") or body or "[áudio recebido]"
+        db.add(
+            AIEvent(
+                user_id=current_user.id,
+                conversation_id=conversation.id,
+                event_type="voice.transcribed",
+                payload=transcription,
+            )
+        )
+
     message = Message(
         conversation_id=conversation.id,
         direction="inbound",
-        body=normalized["body"],
+        body=body,
         raw_payload=payload,
         channel_message_id=normalized.get("channel_message_id"),
     )
