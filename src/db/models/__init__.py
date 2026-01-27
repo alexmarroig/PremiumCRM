@@ -1,10 +1,13 @@
 from .models import (
     AIEvent,
+    AuditLog,
     Channel,
     Contact,
     ContactSettings,
     Conversation,
     Flow,
+    InternalComment,
+    LeadTask,
     Message,
     Notification,
     Rule,
@@ -14,11 +17,14 @@ from .models import (
 
 __all__ = [
     "AIEvent",
+    "AuditLog",
     "Channel",
     "Contact",
     "ContactSettings",
     "Conversation",
     "Flow",
+    "InternalComment",
+    "LeadTask",
     "Message",
     "Notification",
     "Rule",

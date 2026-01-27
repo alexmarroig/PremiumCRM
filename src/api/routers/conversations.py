@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -6,10 +6,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.deps import get_current_user
-from db.models import Channel, Contact, ContactSettings, Conversation, Message, User
+from db.models import Channel, Contact, ContactSettings, Conversation, LeadTask, Message, User
 from db.session import get_db
-from services.ai.mock_provider import MockAIProvider
-from services.automation.events import EventBus
+from services.timeline import build_conversation_timeline
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -38,6 +37,14 @@ class ConversationDetail(BaseModel):
 
 class ConversationPatch(BaseModel):
     status: str
+
+
+class LeadTaskPayload(BaseModel):
+    title: str | None = None
+    priority: str = "medium"
+    due_date: date | None = None
+    assignee_id: str | None = None
+    status: str | None = None
 
 
 @router.get("", response_model=list[ConversationSummary])
@@ -150,3 +157,69 @@ def mark_read(conversation_id: str, current_user: User = Depends(get_current_use
     convo.unread_count = 0
     db.commit()
     return {"status": "ok"}
+
+
+@router.post("/{conversation_id}/history")
+def conversation_history(
+    conversation_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    convo = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+        .first()
+    )
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    timeline = build_conversation_timeline(db, convo)
+    convo.timeline = {"items": timeline}
+    db.commit()
+    return {"conversation_id": str(convo.id), "timeline": timeline}
+
+
+@router.post("/{conversation_id}/tasks")
+def manage_lead_tasks(
+    conversation_id: str,
+    payload: LeadTaskPayload | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    convo = (
+        db.query(Conversation)
+        .filter(Conversation.id == conversation_id, Conversation.user_id == current_user.id)
+        .first()
+    )
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if payload and payload.title:
+        lead_task = LeadTask(
+            conversation_id=convo.id,
+            title=payload.title,
+            priority=payload.priority,
+            due_date=payload.due_date,
+            assignee_id=payload.assignee_id,
+            status=payload.status or "todo",
+        )
+        db.add(lead_task)
+        db.commit()
+        db.refresh(lead_task)
+
+    tasks = (
+        db.query(LeadTask)
+        .filter(LeadTask.conversation_id == convo.id)
+        .order_by(LeadTask.due_date.asc().nullslast())
+        .all()
+    )
+    return [
+        {
+            "id": str(task.id),
+            "title": task.title,
+            "priority": task.priority,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "assignee_id": str(task.assignee_id) if task.assignee_id else None,
+            "status": task.status,
+        }
+        for task in tasks
+    ]

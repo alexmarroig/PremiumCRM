@@ -17,7 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db.base import Base
@@ -41,6 +41,7 @@ notification_type_enum = Enum(
 notification_entity_enum = Enum(
     "conversation", "task", "rule", "system", name="notification_entity"
 )
+user_role_enum = Enum("agent", "manager", "admin", name="user_role")
 
 
 class User(Base):
@@ -52,6 +53,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    role: Mapped[str] = mapped_column(user_role_enum, default="agent", server_default="agent")
 
     channels = relationship("Channel", back_populates="user")
     contacts = relationship("Contact", back_populates="user")
@@ -124,6 +126,7 @@ class Conversation(Base):
     status: Mapped[str] = mapped_column(conversation_status_enum, default="open", server_default="open")
     last_message_at: Mapped[Optional[datetime]] = mapped_column()
     unread_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    timeline: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     user = relationship("User", back_populates="conversations")
     contact = relationship("Contact", back_populates="conversations")
@@ -165,6 +168,56 @@ class Task(Base):
     priority: Mapped[str] = mapped_column(task_priority_enum, default="medium", server_default="medium")
 
     user = relationship("User", back_populates="tasks")
+    conversation = relationship("Conversation")
+
+
+class LeadTask(Base):
+    __tablename__ = "lead_tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    priority: Mapped[str] = mapped_column(task_priority_enum, default="medium", server_default="medium")
+    due_date: Mapped[Optional[date]] = mapped_column(Date)
+    assignee_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(task_status_enum, default="todo", server_default="todo")
+
+    conversation = relationship("Conversation")
+    assignee = relationship("User")
+
+
+class InternalComment(Base):
+    __tablename__ = "internal_comments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("conversations.id"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+
+    conversation = relationship("Conversation")
+    user = relationship("User")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("users.id"))
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    conversation_id: Mapped[Optional[uuid.UUID]] = mapped_column(ForeignKey("conversations.id"))
+    timestamp: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+
+    user = relationship("User")
     conversation = relationship("Conversation")
 
 
