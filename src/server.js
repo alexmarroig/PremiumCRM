@@ -14,6 +14,8 @@ import flowsRoutes from './routes/flows.js';
 import analyticsRoutes from './routes/analytics.js';
 import integrationsRoutes from './routes/integrations.js';
 import billingRoutes from './routes/billing.js';
+import agentRoutes from './routes/agent.js';
+import { startAgentCronJobs } from './agent/index.js';
 
 const app = Fastify({ logger: true });
 
@@ -40,6 +42,11 @@ await app.register(flowsRoutes);
 await app.register(analyticsRoutes);
 await app.register(integrationsRoutes);
 await app.register(billingRoutes);
+await app.register(agentRoutes);
+
+startAgentCronJobs().catch((error) => {
+  app.log.error({ error }, 'Failed to start agent cron jobs');
+});
 
 app.get('/health', async () => ({ status: 'ok' }));
 
