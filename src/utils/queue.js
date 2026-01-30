@@ -1,6 +1,9 @@
 import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
 
-const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+export const createQueueConnection = () =>
+  new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
+
+const connection = createQueueConnection();
 
 export const webhookQueue = new Queue('webhook-processing', { connection });
