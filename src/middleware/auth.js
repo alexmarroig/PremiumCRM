@@ -8,7 +8,12 @@ const publicPaths = new Set([
 ]);
 
 export const authMiddleware = async (request, reply) => {
-  if (publicPaths.has(request.url)) {
+  const requestPath =
+    request.routerPath ||
+    request.url?.split('?')[0] ||
+    request.raw?.url?.split('?')[0] ||
+    request.url;
+  if (publicPaths.has(requestPath)) {
     return;
   }
   const authHeader = request.headers.authorization || '';
