@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from api.deps import get_current_user
 from db.models import Contact, ContactSettings, User
 from db.session import get_db
+from services.automation.publisher import publish_event
 
 router = APIRouter(prefix="/contacts", tags=["contacts"])
 
@@ -65,6 +66,12 @@ def create_contact(payload: ContactCreate, current_user: User = Depends(get_curr
     db.refresh(contact)
     db.add(ContactSettings(contact_id=contact.id))
     db.commit()
+    publish_event(
+        db,
+        str(current_user.id),
+        "contact.created",
+        {"contact_id": str(contact.id), "name": contact.name, "handle": contact.handle},
+    )
     return {"id": str(contact.id), "name": contact.name, "handle": contact.handle}
 
 
@@ -77,6 +84,12 @@ def update_contact(contact_id: str, payload: ContactUpdate, current_user: User =
         setattr(contact, field, value)
     db.commit()
     db.refresh(contact)
+    publish_event(
+        db,
+        str(current_user.id),
+        "contact.updated",
+        {"contact_id": str(contact.id), "fields": payload.model_dump(exclude_unset=True)},
+    )
     return {"id": str(contact.id), "name": contact.name, "handle": contact.handle}
 
 

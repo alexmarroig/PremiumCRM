@@ -10,6 +10,7 @@ from db.models import AIEvent, Conversation, Message, User
 from db.session import get_db
 from services.ai.mock_provider import MockAIProvider
 from services.automation.events import EventBus
+from services.automation.publisher import publish_event
 
 router = APIRouter(prefix="/conversations/{conversation_id}/messages", tags=["messages"])
 
@@ -72,4 +73,10 @@ def create_message(
     db.add(AIEvent(user_id=current_user.id, conversation_id=convo.id, event_type="message.sent", payload={"body": payload.body}))
     db.commit()
     db.refresh(message)
+    publish_event(
+        db,
+        str(current_user.id),
+        "message.sent",
+        {"message_id": str(message.id), "conversation_id": str(convo.id), "body": message.body, "channel": str(convo.channel_id)},
+    )
     return MessageOut(id=str(message.id), body=message.body, direction=message.direction, created_at=message.created_at)

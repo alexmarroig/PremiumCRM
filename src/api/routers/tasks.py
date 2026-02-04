@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from api.deps import get_current_user
 from db.models import Conversation, Task, User
 from db.session import get_db
+from services.automation.publisher import publish_event
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -60,6 +61,12 @@ def create_task(payload: TaskCreate, current_user: User = Depends(get_current_us
     db.add(task)
     db.commit()
     db.refresh(task)
+    publish_event(
+        db,
+        str(current_user.id),
+        "task.created",
+        {"task_id": str(task.id), "title": task.title, "conversation_id": task.conversation_id},
+    )
     return {"id": str(task.id), "title": task.title}
 
 
@@ -82,4 +89,10 @@ def complete_task(task_id: str, current_user: User = Depends(get_current_user), 
         raise HTTPException(status_code=404, detail="Task not found")
     task.status = "done"
     db.commit()
+    publish_event(
+        db,
+        str(current_user.id),
+        "task.completed",
+        {"task_id": str(task.id), "title": task.title, "conversation_id": task.conversation_id},
+    )
     return {"status": "ok"}

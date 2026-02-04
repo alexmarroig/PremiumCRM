@@ -1,6 +1,10 @@
 from .models import (
     AIEvent,
     AuditLog,
+    AutomationCallbackEvent,
+    AutomationDelivery,
+    AutomationDestination,
+    AutomationEvent,
     Channel,
     Contact,
     ContactSettings,
@@ -18,6 +22,10 @@ from .models import (
 __all__ = [
     "AIEvent",
     "AuditLog",
+    "AutomationCallbackEvent",
+    "AutomationDelivery",
+    "AutomationDestination",
+    "AutomationEvent",
     "Channel",
     "Contact",
     "ContactSettings",

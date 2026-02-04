@@ -1,5 +1,6 @@
 from . import (
     ai,
+    automations,
     auth,
     channels,
     contacts,
@@ -18,6 +19,7 @@ from . import (
 
 __all__ = [
     "ai",
+    "automations",
     "auth",
     "channels",
     "contacts",
