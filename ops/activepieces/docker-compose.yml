@@ -10,7 +10,14 @@ services:
       AP_DB_TYPE: "SQLITE"
       AP_DB_URL: "/var/lib/activepieces/activepieces.db"
       AP_ENCRYPTION_KEY: "dev-encryption-key"
+      AP_REDIS_URL: "redis://redis:6379"
     volumes:
       - activepieces_data:/var/lib/activepieces
+    depends_on:
+      - redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 volumes:
   activepieces_data: {}
