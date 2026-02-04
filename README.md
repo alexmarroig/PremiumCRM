@@ -73,3 +73,68 @@ Run pytest locally or in the container: `make test`.
 - AI provider defaults to mock heuristics; can be swapped via `services/ai/provider.py` interface.
 - All records are scoped per-user; queries filter on `user_id`.
 - Background jobs emit overdue and stalled lead notifications hourly/daily.
+- Automation Hub emite eventos para destinos externos (Activepieces) e recebe callbacks assinados.
+
+## Automation Hub (Activepieces)
+O backend expõe um hub de automações que envia eventos do CRM para webhooks do Activepieces e recebe callbacks assinados com ações a executar no CRM.
+
+### Configuração (env)
+```
+AUTOMATION_ENABLED=true
+AUTOMATION_DEFAULT_TIMEOUT_SECONDS=10
+AUTOMATION_MAX_ATTEMPTS=8
+AUTOMATION_REPLAY_WINDOW_SECONDS=300
+AUTOMATION_RATE_LIMIT_PER_MINUTE=60
+```
+
+### Destinos (webhooks outbound)
+Crie um destino por tenant em `/api/v1/automations/destinations`. O `secret` não é persistido em texto; ele é mascarado no banco e guardado em memória/env por `secret_env_key`.
+
+Headers enviados para o Activepieces:
+- `X-Alfred-Signature` (HMAC-SHA256)
+- `X-Alfred-Event-Id`
+- `X-Alfred-Tenant-Id`
+- `X-Alfred-Timestamp` (epoch seconds)
+
+Payload padrão:
+```json
+{
+  "event_id": "...",
+  "tenant_id": "...",
+  "occurred_at": "2024-07-15T12:00:00Z",
+  "type": "message.ingested",
+  "payload": { "..." }
+}
+```
+
+### Callbacks (webhooks inbound)
+Endpoint: `POST /api/v1/automations/callbacks`
+
+Headers esperados:
+- `X-Automation-Signature` (HMAC-SHA256)
+- `X-Automation-Event-Id`
+- `X-Automation-Destination-Id`
+- `X-Automation-Timestamp` (epoch seconds)
+
+Payload mínimo:
+```json
+{
+  "tenant_id": "...",
+  "action": "create_task",
+  "payload": { "title": "Follow up" }
+}
+```
+
+Ações suportadas:
+- `create_task`
+- `update_conversation_status`
+- `add_internal_comment`
+- `send_message`
+- `update_contact`
+
+### Subindo o Activepieces localmente
+Há um `docker-compose` auxiliar em `ops/activepieces/docker-compose.yml`. Suba com:
+```bash
+docker-compose -f ops/activepieces/docker-compose.yml up
+```
+Depois configure um workflow no Activepieces apontando o webhook de entrada para o Alfred, e use o endpoint de callback do Alfred como action HTTP no fluxo.

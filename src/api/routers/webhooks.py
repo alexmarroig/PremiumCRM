@@ -8,6 +8,7 @@ from api.deps import get_current_user
 from db.models import AIEvent, Channel, Contact, ContactSettings, Conversation, Message, Notification, Rule, Task, User
 from db.session import get_db
 from services.ai import get_ai_provider
+from services.automation.publisher import publish_event
 from services.automation.rules_engine import evaluate_rule
 from services.webhooks.normalizers import email, instagram, messenger, whatsapp
 
@@ -32,10 +33,10 @@ def get_or_create_channel(db: Session, user_id, channel_type: str) -> Channel:
     return channel
 
 
-def get_or_create_contact(db: Session, user_id, normalized: dict) -> Contact:
+def get_or_create_contact(db: Session, user_id, normalized: dict) -> tuple[Contact, bool]:
     contact = db.query(Contact).filter(Contact.user_id == user_id, Contact.handle == normalized["handle"]).first()
     if contact:
-        return contact
+        return contact, False
     contact = Contact(
         user_id=user_id,
         name=normalized.get("name") or normalized["handle"],
@@ -48,10 +49,10 @@ def get_or_create_contact(db: Session, user_id, normalized: dict) -> Contact:
     db.refresh(contact)
     db.add(ContactSettings(contact_id=contact.id))
     db.commit()
-    return contact
+    return contact, True
 
 
-def get_or_create_conversation(db: Session, user_id, contact_id, channel_id) -> Conversation:
+def get_or_create_conversation(db: Session, user_id, contact_id, channel_id) -> tuple[Conversation, bool]:
     convo = (
         db.query(Conversation)
         .filter(
@@ -62,12 +63,12 @@ def get_or_create_conversation(db: Session, user_id, contact_id, channel_id) -> 
         .first()
     )
     if convo:
-        return convo
+        return convo, False
     convo = Conversation(user_id=user_id, contact_id=contact_id, channel_id=channel_id, status="open")
     db.add(convo)
     db.commit()
     db.refresh(convo)
-    return convo
+    return convo, True
 
 
 @router.post("/{channel_type}")
@@ -76,8 +77,16 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
         raise HTTPException(status_code=400, detail="Unsupported channel")
     normalized = NORMALIZERS[channel_type](payload)
     channel = get_or_create_channel(db, current_user.id, channel_type)
-    contact = get_or_create_contact(db, current_user.id, normalized)
-    conversation = get_or_create_conversation(db, current_user.id, contact.id, channel.id)
+    contact, contact_created = get_or_create_contact(db, current_user.id, normalized)
+    conversation, conversation_created = get_or_create_conversation(db, current_user.id, contact.id, channel.id)
+
+    if contact_created:
+        publish_event(
+            db,
+            str(current_user.id),
+            "contact.created",
+            {"contact_id": str(contact.id), "name": contact.name, "handle": contact.handle},
+        )
 
     body = normalized.get("body") or ""
     audio_base64 = normalized.get("audio_base64")
@@ -106,9 +115,47 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
     db.commit()
     db.refresh(message)
 
+    if conversation_created:
+        publish_event(
+            db,
+            str(current_user.id),
+            "conversation.created",
+            {
+                "conversation_id": str(conversation.id),
+                "contact_id": str(contact.id),
+                "channel": channel.type,
+                "status": conversation.status,
+            },
+        )
+
     classification = ai_provider.classify_message(message.body, history=None)
     message.ai_classification = classification
     db.add(AIEvent(user_id=current_user.id, conversation_id=conversation.id, event_type="message.received", payload=classification))
+
+    publish_event(
+        db,
+        str(current_user.id),
+        "message.ingested",
+        {
+            "message_id": str(message.id),
+            "conversation_id": str(conversation.id),
+            "body": message.body,
+            "channel": channel.type,
+            "classification": classification,
+        },
+    )
+
+    if classification.get("affordability_score") is not None:
+        publish_event(
+            db,
+            str(current_user.id),
+            "lead.score_changed",
+            {
+                "conversation_id": str(conversation.id),
+                "contact_id": str(contact.id),
+                "score": classification.get("affordability_score"),
+            },
+        )
 
     rules = db.query(Rule).filter(Rule.user_id == current_user.id, Rule.active == True).all()
     for rule in rules:

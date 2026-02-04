@@ -16,6 +16,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -42,6 +43,12 @@ notification_entity_enum = Enum(
     "conversation", "task", "rule", "system", name="notification_entity"
 )
 user_role_enum = Enum("agent", "manager", "admin", name="user_role")
+automation_delivery_status_enum = Enum(
+    "pending", "sent", "failed", name="automation_delivery_status"
+)
+automation_callback_status_enum = Enum(
+    "processed", "rejected", name="automation_callback_status"
+)
 
 
 class User(Base):
@@ -282,6 +289,97 @@ class Notification(Base):
     message: Mapped[str | None] = mapped_column(Text)
 
     user = relationship("User", back_populates="notifications")
+
+
+class AutomationDestination(Base):
+    __tablename__ = "automation_destinations"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_automation_destination_name"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    secret_env_key: Mapped[str] = mapped_column(String, nullable=False)
+    secret_masked: Mapped[str] = mapped_column(String, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    event_types: Mapped[List[str]] = mapped_column(ARRAY(String), server_default="{}", default=list)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow, server_default=func.now(), onupdate=func.now()
+    )
+
+    user = relationship("User")
+    deliveries = relationship("AutomationDelivery", back_populates="destination")
+
+
+class AutomationEvent(Base):
+    __tablename__ = "automation_events"
+    __table_args__ = (
+        Index("ix_automation_events_user_type", "user_id", "type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    user = relationship("User")
+    deliveries = relationship("AutomationDelivery", back_populates="event")
+
+
+class AutomationDelivery(Base):
+    __tablename__ = "automation_deliveries"
+    __table_args__ = (
+        UniqueConstraint("event_id", "destination_id", name="uq_automation_delivery_event_destination"),
+        Index("ix_automation_deliveries_status_retry", "status", "next_retry_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    destination_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("automation_destinations.id"), nullable=False
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("automation_events.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(automation_delivery_status_enum, default="pending", server_default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column()
+
+    destination = relationship("AutomationDestination", back_populates="deliveries")
+    event = relationship("AutomationEvent", back_populates="deliveries")
+
+
+class AutomationCallbackEvent(Base):
+    __tablename__ = "automation_callback_events"
+    __table_args__ = (
+        UniqueConstraint("event_id", "destination_id", name="uq_automation_callback_event_destination"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    destination_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("automation_destinations.id"), nullable=False
+    )
+    event_id: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(automation_callback_status_enum, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    response: Mapped[Optional[dict]] = mapped_column(JSONB)
+    received_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
+
+    destination = relationship("AutomationDestination")
+    user = relationship("User")
 
 
 # Explicitly define indexes for contacts

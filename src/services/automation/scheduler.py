@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from core.logging import get_logger
 from db.models import Conversation, Notification, Task
 from db.session import SessionLocal
+from services.automation.publisher import process_pending_deliveries
 
 logger = get_logger(__name__)
 
@@ -14,6 +15,7 @@ def create_scheduler() -> BackgroundScheduler:
     scheduler = BackgroundScheduler()
     scheduler.add_job(check_overdue_tasks, "interval", hours=1)
     scheduler.add_job(check_stalled_leads, "interval", days=1)
+    scheduler.add_job(process_pending_deliveries, "interval", minutes=1)
     return scheduler
 
 

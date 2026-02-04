@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  activepieces:
+    image: ghcr.io/activepieces/activepieces:latest
+    ports:
+      - "8080:80"
+    environment:
+      AP_ENVIRONMENT: "development"
+      AP_API_KEY: "dev-api-key"
+      AP_DB_TYPE: "SQLITE"
+      AP_DB_URL: "/var/lib/activepieces/activepieces.db"
+      AP_ENCRYPTION_KEY: "dev-encryption-key"
+    volumes:
+      - activepieces_data:/var/lib/activepieces
+volumes:
+  activepieces_data: {}

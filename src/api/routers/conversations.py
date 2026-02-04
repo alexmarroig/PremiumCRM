@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from api.deps import get_current_user
 from db.models import Channel, Contact, ContactSettings, Conversation, LeadTask, Message, User
 from db.session import get_db
+from services.automation.publisher import publish_event
 from services.timeline import build_conversation_timeline
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -142,6 +143,21 @@ def update_conversation(
     convo.status = payload.status
     db.commit()
     db.refresh(convo)
+    last_msg = convo.messages[-1] if convo.messages else None
+    ai_cls = last_msg.ai_classification if last_msg else None
+    publish_event(
+        db,
+        str(current_user.id),
+        "conversation.updated",
+        {
+            "conversation_id": str(convo.id),
+            "status": convo.status,
+            "channel": convo.channel.type,
+            "urgency": ai_cls.get("urgency") if ai_cls else None,
+            "lead_score": ai_cls.get("affordability_score") if ai_cls else None,
+            "assigned_to": None,
+        },
+    )
     return get_conversation(conversation_id, current_user, db)
 
 
