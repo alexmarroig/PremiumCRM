@@ -20,12 +20,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def get_password_hash(password: str) -> str:
-    for scheme in ("bcrypt", "bcrypt_sha256", "pbkdf2_sha256"):
-        try:
-            return pwd_context.hash(password, scheme=scheme)
-        except ValueError:
-            continue
-    raise ValueError("Unable to hash password with available schemes")
+    # Let passlib choose the configured default scheme.
+    # This avoids hardcoding optional algorithms that may not be installed
+    # in every environment (e.g. bcrypt_sha256) and removes deprecated usage
+    # of the `scheme` argument.
+    return pwd_context.hash(password)
 
 
 def create_token(subject: str, expires_delta: timedelta, token_type: str) -> str:
