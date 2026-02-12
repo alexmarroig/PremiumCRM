@@ -66,6 +66,7 @@ def create_task(payload: TaskCreate, current_user: User = Depends(get_current_us
         str(current_user.id),
         "task.created",
         {"task_id": str(task.id), "title": task.title, "conversation_id": task.conversation_id},
+        source_event_id=str(task.id),
     )
     return {"id": str(task.id), "title": task.title}
 
@@ -94,5 +95,6 @@ def complete_task(task_id: str, current_user: User = Depends(get_current_user), 
         str(current_user.id),
         "task.completed",
         {"task_id": str(task.id), "title": task.title, "conversation_id": task.conversation_id},
+        source_event_id=f"{task.id}:completed",
     )
     return {"status": "ok"}

@@ -157,6 +157,7 @@ def update_conversation(
             "lead_score": ai_cls.get("affordability_score") if ai_cls else None,
             "assigned_to": None,
         },
+        source_event_id=f"{convo.id}:{convo.status}",
     )
     return get_conversation(conversation_id, current_user, db)
 

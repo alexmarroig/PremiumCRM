@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -71,6 +74,7 @@ def create_contact(payload: ContactCreate, current_user: User = Depends(get_curr
         str(current_user.id),
         "contact.created",
         {"contact_id": str(contact.id), "name": contact.name, "handle": contact.handle},
+        source_event_id=str(contact.id),
     )
     return {"id": str(contact.id), "name": contact.name, "handle": contact.handle}
 
@@ -84,11 +88,14 @@ def update_contact(contact_id: str, payload: ContactUpdate, current_user: User =
         setattr(contact, field, value)
     db.commit()
     db.refresh(contact)
+    changed_fields = payload.model_dump(exclude_unset=True)
+    fields_fingerprint = hashlib.sha256(json.dumps(changed_fields, sort_keys=True).encode("utf-8")).hexdigest()
     publish_event(
         db,
         str(current_user.id),
         "contact.updated",
-        {"contact_id": str(contact.id), "fields": payload.model_dump(exclude_unset=True)},
+        {"contact_id": str(contact.id), "fields": changed_fields},
+        source_event_id=f"{contact.id}:{fields_fingerprint}",
     )
     return {"id": str(contact.id), "name": contact.name, "handle": contact.handle}
 
