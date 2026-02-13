@@ -1,6 +1,8 @@
 from .models import (
     AIEvent,
     AuditLog,
+    AutomationBuilderAutomation,
+    AutomationBuilderRun,
     AutomationCallbackEvent,
     AutomationDelivery,
     AutomationDestination,
@@ -22,6 +24,8 @@ from .models import (
 __all__ = [
     "AIEvent",
     "AuditLog",
+    "AutomationBuilderAutomation",
+    "AutomationBuilderRun",
     "AutomationCallbackEvent",
     "AutomationDelivery",
     "AutomationDestination",
