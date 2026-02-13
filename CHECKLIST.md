@@ -25,7 +25,6 @@
 - `PATCH /api/v1/automations/destinations/{destination_id}`
 - `DELETE /api/v1/automations/destinations/{destination_id}`
 - `POST /api/v1/automations/callbacks`
-- `POST /api/v1/automations/debug/sign` (somente dev/admin)
 - Alias compatível: `/v1/automations/*`
 
 ## Env vars necessárias
@@ -35,7 +34,6 @@
 - `AUTOMATION_REPLAY_WINDOW_SECONDS`
 - `AUTOMATION_RATE_LIMIT_PER_MINUTE`
 - `AUTOMATION_SECRET_ENCRYPTION_KEY`
-- `AUTOMATION_DEBUG_ENABLED`
 
 ## Comandos de teste
 ```bash

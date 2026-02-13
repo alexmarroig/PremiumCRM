@@ -86,7 +86,6 @@ AUTOMATION_MAX_ATTEMPTS=8
 AUTOMATION_REPLAY_WINDOW_SECONDS=300
 AUTOMATION_RATE_LIMIT_PER_MINUTE=60
 AUTOMATION_SECRET_ENCRYPTION_KEY=<chave-forte-para-criptografar-secrets>
-AUTOMATION_DEBUG_ENABLED=false
 ```
 
 ### Endpoints de automação
@@ -94,42 +93,19 @@ Compatíveis em ambos os prefixos:
 - `/api/v1/automations/*`
 - `/v1/automations/*` (alias para integrações externas)
 
-### Especificação ÚNICA da assinatura HMAC (callbacks Activepieces -> Alfred)
-Use exatamente estes headers:
-- `X-Automation-Signature`: assinatura em hex (HMAC-SHA256)
-- `X-Automation-Timestamp`: epoch seconds (string)
-- `X-Automation-Event-Id`: id único do callback (ex.: `cbk-evt-001`)
-- `X-Automation-Destination-Id`: id do destination cadastrado no Alfred
+### Destinos (webhooks outbound)
+Crie um destino por tenant em `POST /api/v1/automations/destinations`.
 
-Regras exatas:
-1. `timestamp` = `Math.floor(Date.now()/1000).toString()`.
-2. `body_json` = `JSON.stringify(body)` (sem espaços).
-3. `base_string` = `${timestamp}.${event_id}.${tenant_id}.${body_json}`.
-4. `signature` = `HMAC_SHA256_HEX(secret, base_string)`.
+Campos:
+- `name`
+- `url`
+- `secret`
+- `enabled`
+- `event_types` (`*` ou lista de tipos)
 
-Validação no backend:
-- comparação da assinatura em **constant time** (`hmac.compare_digest`),
-- timestamp dentro de `AUTOMATION_REPLAY_WINDOW_SECONDS`,
-- `tenant_id` do body deve bater com owner do destination,
-- idempotência por `(destination_id, event_id)`.
-
-Exemplo completo (vetor de teste):
-- `secret`: `super-secret`
-- `timestamp`: `1700000000`
-- `event_id`: `evt_123`
-- `tenant_id`: `tenant_abc`
-- `body_json`:
-```json
-{"tenant_id":"tenant_abc","action":"create_task","payload":{"title":"Ligar para cliente"}}
-```
-- `base_string`:
-```text
-1700000000.evt_123.tenant_abc.{"tenant_id":"tenant_abc","action":"create_task","payload":{"title":"Ligar para cliente"}}
-```
-- `signature` esperada:
-```text
-098db21286883fa0f8368d83f132ca655f2fd8bb4d4841d10c1b06604e61cc37
-```
+O segredo é:
+- mascarado no banco (`secret_masked`)
+- persistido também em formato criptografado (`secret_encrypted`) usando `AUTOMATION_SECRET_ENCRYPTION_KEY`
 
 ### Debug de assinatura (somente dev/admin)
 Endpoint:
@@ -150,11 +126,27 @@ Input:
 }
 ```
 
-Output:
+Idempotência outbound:
+- O publisher aceita `source_event_id` opcional para evitar duplicação de eventos quando a mesma ação é reprocessada.
+- Existe restrição única por tenant/tipo/fonte (`user_id`, `type`, `source_event_id`) na tabela `automation_events`.
+
+
+### Callbacks (webhooks inbound)
+Endpoint: `POST /api/v1/automations/callbacks`
+
+Headers esperados:
+- `X-Automation-Signature` (HMAC-SHA256)
+- `X-Automation-Event-Id`
+- `X-Automation-Destination-Id`
+- `X-Automation-Timestamp` (epoch seconds)
+
+Payload mínimo:
 ```json
 {
-  "base_string": "...",
-  "signature_expected": "..."
+  "tenant_id": "...",
+  "correlation_id": "cbk-evt-001",
+  "action": "create_task",
+  "params": { "title": "Follow up" }
 }
 ```
 
@@ -201,39 +193,30 @@ return {
 };
 ```
 
-#### Step 3: HTTP Request step
-- Method: `POST`
-- URL: `https://<alfred>/api/v1/automations/callbacks`
-- Headers: usar `{{steps.code.headers}}`
-- Body (JSON): usar `{{steps.code.body}}`
-
-### Destinos (webhooks outbound)
-Crie um destino por tenant em `POST /api/v1/automations/destinations`.
-
-Campos:
-- `name`
-- `url`
-- `secret`
-- `enabled`
-- `event_types` (`*` ou lista de tipos)
-
-O segredo é:
-- mascarado no banco (`secret_masked`)
-- persistido também em formato criptografado (`secret_encrypted`) usando `AUTOMATION_SECRET_ENCRYPTION_KEY`
-
-### Quickstart 10 minutos (Activepieces cloud)
-Activepieces alvo: `https://activepieces-latest-nrrb.onrender.com`
-
-1. Faça login/registro no Alfred e copie `access_token`.
-2. No Activepieces, crie Flow com Webhook Trigger e copie URL.
-3. Registre destination no Alfred:
+Exemplo de callback assinado para o Alfred:
 ```bash
-curl -X POST http://localhost:8000/api/v1/automations/destinations   -H "Authorization: Bearer <access_token>"   -H "Content-Type: application/json"   -d '{"name":"activepieces-main","url":"<webhook_trigger_url>","secret":"<shared_secret>","enabled":true,"event_types":["message.ingested","task.created","contact.updated"]}'
+curl -X POST http://localhost:8000/api/v1/automations/callbacks \
+  -H "Content-Type: application/json" \
+  -H "X-Automation-Signature: <hmac_sha256_hex>" \
+  -H "X-Automation-Event-Id: cbk-evt-001" \
+  -H "X-Automation-Destination-Id: <destination_uuid>" \
+  -H "X-Automation-Timestamp: <epoch_seconds>" \
+  -d '{
+    "tenant_id": "<tenant_uuid>",
+    "action": "create_task",
+    "payload": {"title": "Retornar cliente", "priority": "high"}
+  }'
 ```
-4. No Activepieces, adicione Code step com snippet acima.
-5. Adicione HTTP Request step apontando para callback do Alfred.
-6. Execute o flow e valide retorno `ok: true`.
-7. Verifique resultado no Alfred (`/api/v1/tasks`, `/api/v1/contacts`, etc).
+
+### Checklist E2E (Alfred <-> Activepieces)
+1. Criar destino em `/api/v1/automations/destinations` com `event_types` relevantes (ex.: `message.ingested`, `task.created`).
+2. No Activepieces, criar flow com **Webhook Trigger** apontando para a URL de destino configurada no Alfred.
+3. Enviar mensagem inbound para Alfred (`/api/v1/webhooks/{channel}`) e validar recebimento no trigger do Activepieces.
+4. No flow, adicionar ação HTTP para `POST /api/v1/automations/callbacks` com headers assinados.
+5. Validar execução da ação no Alfred (ex.: tarefa criada, contato atualizado).
+6. Simular falha no destino e confirmar retries automáticos (`automation_deliveries.status=pending` com `next_retry_at`).
+7. Repetir callback com mesmo `event_id` e confirmar comportamento idempotente (resposta reaproveitada).
+
 ### Subindo o Activepieces localmente
 Há um `docker-compose` auxiliar em `ops/activepieces/docker-compose.yml`. Suba com:
 ```bash

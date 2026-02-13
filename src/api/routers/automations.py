@@ -15,13 +15,9 @@ from services.automation.audit import record_automation_audit
 from services.automation.callbacks import execute_action, record_callback_event, validate_callback_request
 from services.automation.signing import (
     build_env_key,
-    build_signature_base_string,
     encrypt_secret,
     ensure_secret_env,
     mask_secret,
-    resolve_destination_secret,
-    serialize_callback_body,
-    sign_payload,
 )
 
 router = APIRouter(prefix="/automations", tags=["automations"])
