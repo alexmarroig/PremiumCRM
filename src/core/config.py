@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     automation_max_attempts: int = Field(8, alias="AUTOMATION_MAX_ATTEMPTS")
     automation_replay_window_seconds: int = Field(300, alias="AUTOMATION_REPLAY_WINDOW_SECONDS")
     automation_rate_limit_per_minute: int = Field(60, alias="AUTOMATION_RATE_LIMIT_PER_MINUTE")
+    automation_secret_encryption_key: str = Field("dev-automation-secret", alias="AUTOMATION_SECRET_ENCRYPTION_KEY")
+    automation_debug_enabled: bool = Field(False, alias="AUTOMATION_DEBUG_ENABLED")
 
     class Config:
         env_file = ".env"

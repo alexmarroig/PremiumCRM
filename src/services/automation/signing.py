@@ -1,15 +1,29 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
 from datetime import datetime, timezone
+from itertools import cycle
 from typing import Optional
 
 from core.config import get_settings
+from db.models import AutomationDestination
+
+
+SIGNING_SEPARATOR = "."
+
+
+def serialize_callback_body(body: dict) -> str:
+    return json.dumps(body, ensure_ascii=False, separators=(",", ":"))
+
+
+def build_signature_base_string(timestamp: str, event_id: str, tenant_id: str, body: bytes) -> str:
+    return SIGNING_SEPARATOR.join([timestamp, event_id, tenant_id, body.decode("utf-8")])
 
 
 def _signature_payload(timestamp: str, event_id: str, tenant_id: str, body: bytes) -> bytes:
-    return b".".join([timestamp.encode("utf-8"), event_id.encode("utf-8"), tenant_id.encode("utf-8"), body])
+    return build_signature_base_string(timestamp, event_id, tenant_id, body).encode("utf-8")
 
 
 def sign_payload(secret: str, timestamp: str, event_id: str, tenant_id: str, body: bytes) -> str:
@@ -41,6 +55,32 @@ def mask_secret(secret: str) -> str:
     return f"***{secret[-4:]}"
 
 
+def _encryption_key_bytes() -> bytes:
+    settings = get_settings()
+    key = os.getenv("AUTOMATION_SECRET_ENCRYPTION_KEY") or settings.secret_key
+    return hashlib.sha256(key.encode("utf-8")).digest()
+
+
+def encrypt_secret(secret: str) -> str:
+    if not secret:
+        return ""
+    key_stream = cycle(_encryption_key_bytes())
+    encrypted = bytes([char ^ next(key_stream) for char in secret.encode("utf-8")])
+    return base64.urlsafe_b64encode(encrypted).decode("utf-8")
+
+
+def decrypt_secret(encrypted_secret: str) -> Optional[str]:
+    if not encrypted_secret:
+        return None
+    try:
+        data = base64.urlsafe_b64decode(encrypted_secret.encode("utf-8"))
+    except Exception:
+        return None
+    key_stream = cycle(_encryption_key_bytes())
+    decrypted = bytes([char ^ next(key_stream) for char in data])
+    return decrypted.decode("utf-8")
+
+
 def resolve_secret(secret_env_key: str) -> Optional[str]:
     return os.getenv(secret_env_key)
 
@@ -62,3 +102,10 @@ def decode_signature_header(signature: str) -> str:
 def encode_basic_auth(secret: str) -> str:
     token = base64.b64encode(secret.encode("utf-8")).decode("utf-8")
     return token
+
+
+def resolve_destination_secret(destination: AutomationDestination) -> Optional[str]:
+    env_secret = resolve_secret(destination.secret_env_key)
+    if env_secret:
+        return env_secret
+    return decrypt_secret(destination.secret_encrypted or "")

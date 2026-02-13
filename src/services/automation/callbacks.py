@@ -1,4 +1,5 @@
-import os
+import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -16,7 +17,12 @@ from db.models import (
     Task,
 )
 from services.automation.publisher import publish_event
-from services.automation.signing import decode_signature_header, is_timestamp_within_window, verify_signature
+from services.automation.signing import (
+    decode_signature_header,
+    is_timestamp_within_window,
+    resolve_destination_secret,
+    verify_signature,
+)
 
 
 def _require_field(payload: dict, field: str) -> Any:
@@ -56,7 +62,7 @@ def validate_callback_request(
     if not event_id_value:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing event_id")
 
-    secret = os.getenv(destination.secret_env_key)
+    secret = resolve_destination_secret(destination)
     if not secret:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing destination secret")
 
@@ -115,6 +121,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
             tenant_id,
             "task.created",
             {"task_id": str(task.id), "conversation_id": task.conversation_id, "title": task.title},
+            source_event_id=str(task.id),
         )
         return {"task_id": str(task.id)}
 
@@ -139,6 +146,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "status": convo.status,
                 "channel": str(convo.channel_id),
             },
+            source_event_id=f"{convo.id}:{convo.status}",
         )
         return {"conversation_id": str(convo.id), "status": convo.status}
 
@@ -192,6 +200,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "body": message.body,
                 "channel": str(convo.channel_id),
             },
+            source_event_id=str(message.id),
         )
         return {"message_id": str(message.id)}
 
@@ -217,6 +226,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "contact_id": str(contact.id),
                 "fields": fields,
             },
+            source_event_id=f"{contact.id}:{hashlib.sha256(json.dumps(fields, sort_keys=True).encode('utf-8')).hexdigest()}",
         )
         return {"contact_id": str(contact.id)}
 
