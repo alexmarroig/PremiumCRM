@@ -1,5 +1,4 @@
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
@@ -10,8 +9,9 @@ from sqlalchemy.orm import Session
 from core.config import get_settings
 from db.models import AutomationDelivery, AutomationDestination, AutomationEvent
 from db.session import SessionLocal
+from services.automation.audit import record_automation_audit
 from services.automation.rate_limit import rate_limiter
-from services.automation.signing import sign_payload
+from services.automation.signing import resolve_destination_secret, sign_payload
 
 RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600, 21600]
 
@@ -117,7 +117,7 @@ def send_delivery(
     }
     body = json.dumps(payload).encode("utf-8")
     timestamp = str(int(datetime.now(timezone.utc).timestamp()))
-    secret = os.getenv(destination.secret_env_key)
+    secret = resolve_destination_secret(destination)
     if not secret:
         delivery.attempts += 1
         delivery.last_error = "missing_secret"
@@ -165,6 +165,12 @@ def send_delivery(
     delivery.last_error = None
     delivery.next_retry_at = None
     db.commit()
+    record_automation_audit(
+        db,
+        user_id=str(event.user_id),
+        action="automation_event_sent",
+        metadata={"destination_id": str(destination.id), "event_id": str(event.id), "event_type": event.type},
+    )
     return True
 
 

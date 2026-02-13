@@ -85,10 +85,27 @@ AUTOMATION_DEFAULT_TIMEOUT_SECONDS=10
 AUTOMATION_MAX_ATTEMPTS=8
 AUTOMATION_REPLAY_WINDOW_SECONDS=300
 AUTOMATION_RATE_LIMIT_PER_MINUTE=60
+AUTOMATION_SECRET_ENCRYPTION_KEY=<chave-forte-para-criptografar-secrets>
 ```
 
+### Endpoints de automação
+Compatíveis em ambos os prefixos:
+- `/api/v1/automations/*`
+- `/v1/automations/*` (alias para integrações externas)
+
 ### Destinos (webhooks outbound)
-Crie um destino por tenant em `/api/v1/automations/destinations`. O `secret` não é persistido em texto; ele é mascarado no banco e guardado em memória/env por `secret_env_key`.
+Crie um destino por tenant em `POST /api/v1/automations/destinations`.
+
+Campos:
+- `name`
+- `url`
+- `secret`
+- `enabled`
+- `event_types` (`*` ou lista de tipos)
+
+O segredo é:
+- mascarado no banco (`secret_masked`)
+- persistido também em formato criptografado (`secret_encrypted`) usando `AUTOMATION_SECRET_ENCRYPTION_KEY`
 
 Headers enviados para o Activepieces:
 - `X-Alfred-Signature` (HMAC-SHA256)
@@ -125,8 +142,9 @@ Payload mínimo:
 ```json
 {
   "tenant_id": "...",
+  "correlation_id": "cbk-evt-001",
   "action": "create_task",
-  "payload": { "title": "Follow up" }
+  "params": { "title": "Follow up" }
 }
 ```
 

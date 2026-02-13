@@ -305,6 +305,7 @@ class AutomationDestination(Base):
     url: Mapped[str] = mapped_column(String, nullable=False)
     secret_env_key: Mapped[str] = mapped_column(String, nullable=False)
     secret_masked: Mapped[str] = mapped_column(String, nullable=False)
+    secret_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     event_types: Mapped[List[str]] = mapped_column(ARRAY(String), server_default="{}", default=list)
     updated_at: Mapped[datetime] = mapped_column(
