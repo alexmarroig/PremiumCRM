@@ -319,6 +319,7 @@ class AutomationEvent(Base):
     __tablename__ = "automation_events"
     __table_args__ = (
         Index("ix_automation_events_user_type", "user_id", "type"),
+        UniqueConstraint("user_id", "type", "source_event_id", name="uq_automation_event_source"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -326,6 +327,7 @@ class AutomationEvent(Base):
     )
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)
+    source_event_id: Mapped[Optional[str]] = mapped_column(String)
     occurred_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
 

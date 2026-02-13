@@ -1,8 +1,10 @@
 import uuid
+
+from fastapi import HTTPException
 from types import SimpleNamespace
 
 from services.automation import callbacks as callbacks_module
-from services.automation.callbacks import execute_action
+from services.automation.callbacks import execute_action, validate_callback_request
 
 
 class FakeQuery:
@@ -61,3 +63,24 @@ def test_execute_action_update_conversation_status(monkeypatch):
     )
     assert result["status"] == "closed"
     assert conversation.status == "closed"
+
+
+def test_validate_callback_request_rejects_stale_timestamp(monkeypatch):
+    monkeypatch.setenv("AUTOMATION_ENABLED", "true")
+    monkeypatch.setattr(callbacks_module, "is_timestamp_within_window", lambda *_: False)
+
+    try:
+        validate_callback_request(
+            db=FakeDB(),
+            raw_body=b"{}",
+            payload={"tenant_id": "tenant-1", "event_id": "evt-1"},
+            signature="sig",
+            timestamp="0",
+            destination_id="dest-1",
+            event_id="evt-1",
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 401
+        assert exc.detail == "Stale timestamp"
+    else:
+        raise AssertionError("Expected HTTPException")

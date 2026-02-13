@@ -107,6 +107,11 @@ Payload padrão:
 }
 ```
 
+Idempotência outbound:
+- O publisher aceita `source_event_id` opcional para evitar duplicação de eventos quando a mesma ação é reprocessada.
+- Existe restrição única por tenant/tipo/fonte (`user_id`, `type`, `source_event_id`) na tabela `automation_events`.
+
+
 ### Callbacks (webhooks inbound)
 Endpoint: `POST /api/v1/automations/callbacks`
 
@@ -131,6 +136,30 @@ Ações suportadas:
 - `add_internal_comment`
 - `send_message`
 - `update_contact`
+
+Exemplo de callback assinado para o Alfred:
+```bash
+curl -X POST http://localhost:8000/api/v1/automations/callbacks \
+  -H "Content-Type: application/json" \
+  -H "X-Automation-Signature: <hmac_sha256_hex>" \
+  -H "X-Automation-Event-Id: cbk-evt-001" \
+  -H "X-Automation-Destination-Id: <destination_uuid>" \
+  -H "X-Automation-Timestamp: <epoch_seconds>" \
+  -d '{
+    "tenant_id": "<tenant_uuid>",
+    "action": "create_task",
+    "payload": {"title": "Retornar cliente", "priority": "high"}
+  }'
+```
+
+### Checklist E2E (Alfred <-> Activepieces)
+1. Criar destino em `/api/v1/automations/destinations` com `event_types` relevantes (ex.: `message.ingested`, `task.created`).
+2. No Activepieces, criar flow com **Webhook Trigger** apontando para a URL de destino configurada no Alfred.
+3. Enviar mensagem inbound para Alfred (`/api/v1/webhooks/{channel}`) e validar recebimento no trigger do Activepieces.
+4. No flow, adicionar ação HTTP para `POST /api/v1/automations/callbacks` com headers assinados.
+5. Validar execução da ação no Alfred (ex.: tarefa criada, contato atualizado).
+6. Simular falha no destino e confirmar retries automáticos (`automation_deliveries.status=pending` com `next_retry_at`).
+7. Repetir callback com mesmo `event_id` e confirmar comportamento idempotente (resposta reaproveitada).
 
 ### Subindo o Activepieces localmente
 Há um `docker-compose` auxiliar em `ops/activepieces/docker-compose.yml`. Suba com:

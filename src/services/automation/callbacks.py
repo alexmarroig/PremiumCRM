@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -115,6 +117,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
             tenant_id,
             "task.created",
             {"task_id": str(task.id), "conversation_id": task.conversation_id, "title": task.title},
+            source_event_id=str(task.id),
         )
         return {"task_id": str(task.id)}
 
@@ -139,6 +142,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "status": convo.status,
                 "channel": str(convo.channel_id),
             },
+            source_event_id=f"{convo.id}:{convo.status}",
         )
         return {"conversation_id": str(convo.id), "status": convo.status}
 
@@ -192,6 +196,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "body": message.body,
                 "channel": str(convo.channel_id),
             },
+            source_event_id=str(message.id),
         )
         return {"message_id": str(message.id)}
 
@@ -217,6 +222,7 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
                 "contact_id": str(contact.id),
                 "fields": fields,
             },
+            source_event_id=f"{contact.id}:{hashlib.sha256(json.dumps(fields, sort_keys=True).encode('utf-8')).hexdigest()}",
         )
         return {"contact_id": str(contact.id)}
 

@@ -35,15 +35,32 @@ def create_event(
     event_type: str,
     payload: dict,
     occurred_at: Optional[datetime] = None,
+    source_event_id: Optional[str] = None,
 ) -> AutomationEvent:
     event = AutomationEvent(
         user_id=tenant_id,
         type=event_type,
         payload=payload,
         occurred_at=occurred_at or datetime.now(timezone.utc),
+        source_event_id=source_event_id,
     )
     db.add(event)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        existing = (
+            db.query(AutomationEvent)
+            .filter(
+                AutomationEvent.user_id == tenant_id,
+                AutomationEvent.type == event_type,
+                AutomationEvent.source_event_id == source_event_id,
+            )
+            .first()
+        )
+        if existing:
+            return existing
+        raise
     db.refresh(event)
     return event
 
@@ -151,7 +168,13 @@ def send_delivery(
     return True
 
 
-def publish_event(db: Session, tenant_id: str, event_type: str, payload: dict) -> Optional[AutomationEvent]:
+def publish_event(
+    db: Session,
+    tenant_id: str,
+    event_type: str,
+    payload: dict,
+    source_event_id: Optional[str] = None,
+) -> Optional[AutomationEvent]:
     settings = get_settings()
     if not settings.automation_enabled:
         return None
@@ -168,7 +191,7 @@ def publish_event(db: Session, tenant_id: str, event_type: str, payload: dict) -
     if not eligible:
         return None
 
-    event = create_event(db, tenant_id, event_type, payload)
+    event = create_event(db, tenant_id, event_type, payload, source_event_id=source_event_id)
     deliveries = enqueue_deliveries(db, event, eligible)
     for delivery in deliveries:
         send_delivery(db, delivery, delivery.destination, event)
