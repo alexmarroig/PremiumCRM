@@ -9,6 +9,7 @@ from db.models import AIEvent, Channel, Contact, ContactSettings, Conversation, 
 from db.session import get_db
 from services.ai import get_ai_provider
 from services.automation.publisher import publish_event
+from services.automation_builder import run_enabled_automations
 from services.automation.rules_engine import evaluate_rule
 from services.webhooks.normalizers import email, instagram, messenger, whatsapp
 
@@ -146,6 +147,24 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
             "classification": classification,
         },
         source_event_id=normalized.get("channel_message_id") or str(message.id),
+    )
+
+    run_enabled_automations(
+        db=db,
+        user_id=current_user.id,
+        event_type="message.ingested",
+        event_payload={
+            "message_id": str(message.id),
+            "conversation_id": str(conversation.id),
+            "contact_id": str(contact.id),
+            "message": {"id": str(message.id), "text": message.body},
+            "body": message.body,
+            "channel": {"type": channel.type},
+            "urgency": classification.get("urgency"),
+            "lead": {"score": classification.get("affordability_score")},
+            "classification": classification,
+        },
+        source_event_id=str(message.id),
     )
 
     if classification.get("affordability_score") is not None:

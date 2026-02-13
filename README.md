@@ -223,3 +223,72 @@ Há um `docker-compose` auxiliar em `ops/activepieces/docker-compose.yml`. Suba 
 docker-compose -f ops/activepieces/docker-compose.yml up
 ```
 Depois configure um workflow no Activepieces apontando o webhook de entrada para o Alfred, e use o endpoint de callback do Alfred como action HTTP no fluxo.
+
+## Automation Builder (interno, rota B)
+MVP para automações guiadas no backend, sem Activepieces.
+
+### Flow JSON (schema)
+```json
+{
+  "trigger": {"type": "message.ingested"},
+  "conditions": [
+    {"type": "contains_text", "text": "pix"},
+    {"type": "urgency_is", "value": "high"},
+    {"type": "channel_is", "value": "whatsapp"}
+  ],
+  "actions": [
+    {"type": "create_task", "title": "Retornar cliente", "priority": "high"},
+    {"type": "update_conversation_status", "status": "open"},
+    {"type": "add_internal_comment", "text": "Cliente pediu PIX"}
+  ]
+}
+```
+
+### Endpoints
+- `GET /api/v1/automation-builder/automations`
+- `POST /api/v1/automation-builder/automations`
+- `GET /api/v1/automation-builder/automations/{id}`
+- `PATCH /api/v1/automation-builder/automations/{id}`
+- `DELETE /api/v1/automation-builder/automations/{id}`
+- `POST /api/v1/automation-builder/automations/{id}/test-run`
+
+### Exemplo cURL: criar automação
+```bash
+curl -X POST http://localhost:8000/api/v1/automation-builder/automations \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Priorizar urgentes no WhatsApp",
+    "enabled": true,
+    "flow_json": {
+      "trigger": {"type": "message.ingested"},
+      "conditions": [
+        {"type": "contains_text", "text": "urgente"},
+        {"type": "urgency_is", "value": "high"},
+        {"type": "channel_is", "value": "whatsapp"}
+      ],
+      "actions": [
+        {"type": "create_task", "title": "Responder urgente", "priority": "high"},
+        {"type": "update_conversation_status", "status": "open"}
+      ]
+    }
+  }'
+```
+
+### Exemplo cURL: test-run
+```bash
+curl -X POST http://localhost:8000/api/v1/automation-builder/automations/<automation_id>/test-run \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "message.ingested",
+    "event_payload": {
+      "message_id": "msg-123",
+      "conversation_id": "11111111-1111-1111-1111-111111111111",
+      "body": "Isso é urgente",
+      "urgency": "high",
+      "channel": {"type": "whatsapp"},
+      "lead": {"score": 87}
+    }
+  }'
+```
