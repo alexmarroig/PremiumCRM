@@ -86,6 +86,7 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
             str(current_user.id),
             "contact.created",
             {"contact_id": str(contact.id), "name": contact.name, "handle": contact.handle},
+            source_event_id=str(contact.id),
         )
 
     body = normalized.get("body") or ""
@@ -126,6 +127,7 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
                 "channel": channel.type,
                 "status": conversation.status,
             },
+            source_event_id=str(conversation.id),
         )
 
     classification = ai_provider.classify_message(message.body, history=None)
@@ -143,6 +145,7 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
             "channel": channel.type,
             "classification": classification,
         },
+        source_event_id=normalized.get("channel_message_id") or str(message.id),
     )
 
     if classification.get("affordability_score") is not None:
@@ -155,6 +158,7 @@ def ingest_webhook(channel_type: str, payload: dict, current_user: User = Depend
                 "contact_id": str(contact.id),
                 "score": classification.get("affordability_score"),
             },
+            source_event_id=f"{message.id}:lead_score",
         )
 
     rules = db.query(Rule).filter(Rule.user_id == current_user.id, Rule.active == True).all()

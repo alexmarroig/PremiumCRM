@@ -125,3 +125,7 @@ app.include_router(notifications.router, prefix=api_prefix)
 app.include_router(search.router, prefix=api_prefix)
 app.include_router(leads.router, prefix=api_prefix)
 app.include_router(internal_comments.router, prefix=api_prefix)
+
+# Compatibility prefix for integrations expecting /v1/* (without /api).
+v1_compat_prefix = "/v1"
+app.include_router(automations.router, prefix=v1_compat_prefix)

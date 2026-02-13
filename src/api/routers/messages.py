@@ -78,5 +78,6 @@ def create_message(
         str(current_user.id),
         "message.sent",
         {"message_id": str(message.id), "conversation_id": str(convo.id), "body": message.body, "channel": str(convo.channel_id)},
+        source_event_id=str(message.id),
     )
     return MessageOut(id=str(message.id), body=message.body, direction=message.direction, created_at=message.created_at)

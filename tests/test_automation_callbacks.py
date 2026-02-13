@@ -1,8 +1,12 @@
+import asyncio
 import uuid
+
+from fastapi import HTTPException
 from types import SimpleNamespace
 
 from services.automation import callbacks as callbacks_module
-from services.automation.callbacks import execute_action
+from api.routers.automations import automation_callback
+from services.automation.callbacks import execute_action, validate_callback_request
 
 
 class FakeQuery:
@@ -61,3 +65,79 @@ def test_execute_action_update_conversation_status(monkeypatch):
     )
     assert result["status"] == "closed"
     assert conversation.status == "closed"
+
+
+def test_validate_callback_request_rejects_stale_timestamp(monkeypatch):
+    monkeypatch.setenv("AUTOMATION_ENABLED", "true")
+    monkeypatch.setattr(callbacks_module, "is_timestamp_within_window", lambda *_: False)
+
+    try:
+        validate_callback_request(
+            db=FakeDB(),
+            raw_body=b"{}",
+            payload={"tenant_id": "tenant-1", "event_id": "evt-1"},
+            signature="sig",
+            timestamp="0",
+            destination_id="dest-1",
+            event_id="evt-1",
+        )
+    except HTTPException as exc:
+        assert exc.status_code == 401
+        assert exc.detail == "Stale timestamp"
+    else:
+        raise AssertionError("Expected HTTPException")
+
+
+class FakeCallbackQuery:
+    def __init__(self, existing):
+        self.existing = existing
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def first(self):
+        return self.existing
+
+
+class FakeCallbackDB(FakeDB):
+    def __init__(self, existing):
+        super().__init__()
+        self.existing = existing
+
+    def query(self, model):
+        if model.__name__ == "AutomationCallbackEvent":
+            return FakeCallbackQuery(self.existing)
+        return FakeCallbackQuery(None)
+
+
+class FakeRequest:
+    def __init__(self, payload, headers):
+        self._payload = payload
+        self.headers = headers
+
+    async def body(self):
+        import json
+
+        return json.dumps(self._payload).encode("utf-8")
+
+    async def json(self):
+        return self._payload
+
+
+def test_automation_callback_idempotent_short_circuit(monkeypatch):
+    existing = SimpleNamespace(response={"task_id": "t-1"})
+    db = FakeCallbackDB(existing=existing)
+
+    monkeypatch.setattr(
+        "api.routers.automations.validate_callback_request",
+        lambda **kwargs: SimpleNamespace(id="dest-1"),
+    )
+
+    req = FakeRequest(
+        payload={"tenant_id": "tenant-1", "action": "create_task", "event_id": "evt-1", "payload": {"title": "x"}},
+        headers={"X-Automation-Timestamp": "1", "X-Automation-Signature": "sig", "X-Automation-Destination-Id": "dest-1", "X-Automation-Event-Id": "evt-1"},
+    )
+
+    result = asyncio.run(automation_callback(req, db))
+    assert result.ok is True
+    assert result.action_result == {"task_id": "t-1"}
