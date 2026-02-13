@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
 from datetime import datetime, timezone
 from itertools import cycle
@@ -11,7 +12,7 @@ from db.models import AutomationDestination
 
 
 def _signature_payload(timestamp: str, event_id: str, tenant_id: str, body: bytes) -> bytes:
-    return b".".join([timestamp.encode("utf-8"), event_id.encode("utf-8"), tenant_id.encode("utf-8"), body])
+    return build_signature_base_string(timestamp, event_id, tenant_id, body).encode("utf-8")
 
 
 def sign_payload(secret: str, timestamp: str, event_id: str, tenant_id: str, body: bytes) -> str:

@@ -107,20 +107,22 @@ O segredo é:
 - mascarado no banco (`secret_masked`)
 - persistido também em formato criptografado (`secret_encrypted`) usando `AUTOMATION_SECRET_ENCRYPTION_KEY`
 
-Headers enviados para o Activepieces:
-- `X-Alfred-Signature` (HMAC-SHA256)
-- `X-Alfred-Event-Id`
-- `X-Alfred-Tenant-Id`
-- `X-Alfred-Timestamp` (epoch seconds)
+### Debug de assinatura (somente dev/admin)
+Endpoint:
+- `POST /api/v1/automations/debug/sign`
 
-Payload padrão:
+Regras de proteção:
+- retorna 404 em produção,
+- requer `AUTOMATION_DEBUG_ENABLED=true`,
+- requer usuário com role `admin`.
+
+Input:
 ```json
 {
-  "event_id": "...",
-  "tenant_id": "...",
-  "occurred_at": "2024-07-15T12:00:00Z",
-  "type": "message.ingested",
-  "payload": { "..." }
+  "destination_id": "<uuid>",
+  "body": {"tenant_id": "<tenant_uuid>", "action": "create_task", "payload": {"title": "x"}},
+  "timestamp": "1700000000",
+  "event_id": "evt_123"
 }
 ```
 
@@ -148,12 +150,48 @@ Payload mínimo:
 }
 ```
 
-Ações suportadas:
-- `create_task`
-- `update_conversation_status`
-- `add_internal_comment`
-- `send_message`
-- `update_contact`
+### Activepieces Flow Recipe (copy/paste)
+#### Step 1: Webhook Trigger
+- Crie um Flow no Activepieces e adicione um **Webhook Trigger**.
+- Copie a URL pública do trigger para registrar no Alfred como destination outbound.
+
+#### Step 2: Code step (JavaScript)
+Cole este código no Step “Code” (Node.js):
+```javascript
+const crypto = require('crypto');
+
+// ===== ENTRADAS (edite só aqui) =====
+const SECRET = 'COLE_AQUI_O_SECRET_DO_DESTINATION';
+const DESTINATION_ID = 'COLE_AQUI_O_DESTINATION_ID';
+const TENANT_ID = 'COLE_AQUI_O_TENANT_ID';
+const ACTION = 'create_task';
+const PAYLOAD = { title: 'Retornar cliente', priority: 'high' };
+// ================================
+
+const timestamp = Math.floor(Date.now() / 1000).toString();
+const eventId = `cbk-${Date.now()}`;
+
+const body = {
+  tenant_id: TENANT_ID,
+  action: ACTION,
+  payload: PAYLOAD,
+};
+
+const bodyJson = JSON.stringify(body);
+const baseString = `${timestamp}.${eventId}.${TENANT_ID}.${bodyJson}`;
+const signature = crypto.createHmac('sha256', SECRET).update(baseString).digest('hex');
+
+return {
+  body,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Automation-Signature': signature,
+    'X-Automation-Timestamp': timestamp,
+    'X-Automation-Event-Id': eventId,
+    'X-Automation-Destination-Id': DESTINATION_ID,
+  },
+};
+```
 
 Exemplo de callback assinado para o Alfred:
 ```bash

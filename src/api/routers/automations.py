@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from api.deps import get_current_user
+from api.deps import get_current_user, require_roles
+from core.config import get_settings
 from db.models import AutomationCallbackEvent, AutomationDestination, User
 from db.session import get_db
 from services.automation.audit import record_automation_audit
@@ -66,6 +67,18 @@ class CallbackResponse(BaseModel):
     ok: bool
     action_result: dict
     correlation_id: str
+
+
+class DebugSignRequest(BaseModel):
+    destination_id: str
+    body: dict
+    timestamp: str
+    event_id: str
+
+
+class DebugSignResponse(BaseModel):
+    base_string: str
+    signature_expected: str
 
 
 @router.post("/destinations", response_model=DestinationResponse)
@@ -273,3 +286,33 @@ async def automation_callback(request: Request, db: Session = Depends(get_db)):
         raise
 
     return CallbackResponse(ok=True, action_result=result, correlation_id=event_id)
+
+
+@router.post("/debug/sign", response_model=DebugSignResponse)
+def debug_sign_callback(
+    payload: DebugSignRequest,
+    current_user: User = Depends(require_roles("admin")),
+    db: Session = Depends(get_db),
+):
+    settings = get_settings()
+    if settings.environment.lower() == "production" or not settings.automation_debug_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Debug endpoint disabled")
+
+    destination = (
+        db.query(AutomationDestination)
+        .filter(AutomationDestination.id == payload.destination_id, AutomationDestination.user_id == current_user.id)
+        .first()
+    )
+    if not destination:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Destination not found")
+
+    secret = resolve_destination_secret(destination)
+    if not secret:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Destination secret not configured")
+
+    body_json = serialize_callback_body(payload.body)
+    tenant_id = str(destination.user_id)
+    raw_body = body_json.encode("utf-8")
+    base_string = build_signature_base_string(payload.timestamp, payload.event_id, tenant_id, raw_body)
+    signature = sign_payload(secret, payload.timestamp, payload.event_id, tenant_id, raw_body)
+    return DebugSignResponse(base_string=base_string, signature_expected=signature)
