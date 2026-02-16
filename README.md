@@ -252,11 +252,6 @@ MVP para automações guiadas no backend, sem Activepieces.
 - `DELETE /api/v1/automation-builder/automations/{id}`
 - `POST /api/v1/automation-builder/automations/{id}/test-run`
 
-O `test-run` retorna um diagnóstico mais interativo para facilitar uso no builder:
-- `trigger_matched`: se o trigger bateu com `event_type`
-- `condition_results`: lista ordenada das condições com `passed: true/false`
-- `actions_executed` e `results`: ações efetivamente executadas e retorno consolidado
-
 ### Exemplo cURL: criar automação
 ```bash
 curl -X POST http://localhost:8000/api/v1/automation-builder/automations \
