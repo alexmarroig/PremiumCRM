@@ -11,6 +11,11 @@ from core.config import get_settings
 from db.models import AutomationDestination
 
 
+def build_signature_base_string(timestamp: str, event_id: str, tenant_id: str, body: bytes) -> str:
+    body_str = body.decode("utf-8")
+    return f"{timestamp}.{event_id}.{tenant_id}.{body_str}"
+
+
 def _signature_payload(timestamp: str, event_id: str, tenant_id: str, body: bytes) -> bytes:
     return build_signature_base_string(timestamp, event_id, tenant_id, body).encode("utf-8")
 

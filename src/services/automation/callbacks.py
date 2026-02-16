@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from core.config import get_settings
 from db.models import (
@@ -113,8 +114,18 @@ def execute_action(db: Session, tenant_id: str, action: str, payload: dict) -> D
             description=payload.get("description"),
             due_date=due_at,
             priority=payload.get("priority") or "medium",
+            source_event_id=payload.get("source_event_id"),
         )
-        db.add(task)
+        try:
+            if hasattr(db, "begin_nested"):
+                with db.begin_nested():
+                    db.add(task)
+                    db.flush()
+            else:
+                db.add(task)
+        except IntegrityError:
+            return {"skipped": "duplicate_source_event"}
+
         db.commit()
         db.refresh(task)
         publish_event(
