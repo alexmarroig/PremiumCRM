@@ -9,6 +9,18 @@ from sqlalchemy.orm import Session
 
 from db.models import AutomationBuilderAutomation, AutomationBuilderRun
 from services.automation.callbacks import execute_action
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from db.models import (
+    AutomationBuilderAutomation,
+    AutomationBuilderRun,
+    Contact,
+    Conversation,
+    InternalComment,
+    Message,
+    Task,
+)
 
 
 class TriggerMessageIngested(BaseModel):
@@ -244,6 +256,7 @@ def _extract_lead_score(event_payload: dict[str, Any]) -> float | None:
 def evaluate_conditions_detailed(
     conditions: list[ConditionType], event_payload: dict[str, Any]
 ) -> tuple[bool, list[dict[str, Any]]]:
+def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str, Any]) -> bool:
     message_text = str(event_payload.get("message", {}).get("text") or event_payload.get("body") or "")
     urgency = event_payload.get("urgency")
     if urgency is None:
@@ -278,6 +291,17 @@ def evaluate_conditions_detailed(
 def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str, Any]) -> bool:
     matched, _ = evaluate_conditions_detailed(conditions, event_payload)
     return matched
+
+    for condition in conditions:
+        if condition.type == "contains_text" and condition.text.lower() not in message_text.lower():
+            return False
+        if condition.type == "urgency_is" and urgency != condition.value:
+            return False
+        if condition.type == "lead_score_gte" and (lead_score is None or lead_score < condition.value):
+            return False
+        if condition.type == "channel_is" and channel_type != condition.value:
+            return False
+    return True
 
 
 def _resolve_conversation_id(action: ActionType, event_payload: dict[str, Any]) -> UUID | None:
@@ -334,6 +358,72 @@ def execute_actions(
         executed.append({"type": action.type, "result": result})
         results.setdefault("actions", []).append({"type": action.type, **result})
 
+        if action.type == "create_task":
+            task = Task(
+                user_id=user_id,
+                conversation_id=_resolve_conversation_id(action, event_payload),
+                title=action.title,
+                priority=action.priority,
+                source_event_id=source_event_id,
+            )
+            try:
+                with db.begin_nested():
+                    db.add(task)
+                    db.flush()
+                    executed.append({"type": "create_task", "task_id": str(task.id)})
+                    results.setdefault("tasks", []).append(str(task.id))
+            except IntegrityError:
+                executed.append({"type": "create_task", "skipped": "duplicate_source_event"})
+        elif action.type == "update_conversation_status":
+            conversation_id = _resolve_conversation_id(action, event_payload)
+            if conversation_id:
+                convo = (
+                    db.query(Conversation)
+                    .filter(Conversation.id == conversation_id, Conversation.user_id == user_id)
+                    .first()
+                )
+                if convo:
+                    convo.status = action.status
+                    executed.append({"type": "update_conversation_status", "conversation_id": str(convo.id), "status": action.status})
+                    results["conversation_status"] = action.status
+        elif action.type == "add_internal_comment":
+            conversation_id = _resolve_conversation_id(action, event_payload)
+            if conversation_id:
+                comment = InternalComment(conversation_id=conversation_id, user_id=user_id, text=action.text)
+                db.add(comment)
+                db.flush()
+                executed.append({"type": "add_internal_comment", "comment_id": str(comment.id)})
+                results.setdefault("comments", []).append(str(comment.id))
+        elif action.type == "send_message":
+            conversation_id = _resolve_conversation_id(action, event_payload)
+            if conversation_id:
+                message = Message(
+                    conversation_id=conversation_id,
+                    direction="outbound",
+                    body=action.text,
+                    raw_payload={"source": "automation_builder", "channel": action.channel},
+                )
+                db.add(message)
+                convo = (
+                    db.query(Conversation)
+                    .filter(Conversation.id == conversation_id, Conversation.user_id == user_id)
+                    .first()
+                )
+                if convo:
+                    convo.last_message_at = datetime.now(timezone.utc)
+                db.flush()
+                executed.append({"type": "send_message", "message_id": str(message.id)})
+                results.setdefault("messages", []).append(str(message.id))
+        elif action.type == "update_contact":
+            contact_id = event_payload.get("contact_id")
+            if contact_id:
+                contact = db.query(Contact).filter(Contact.id == contact_id, Contact.user_id == user_id).first()
+                if contact:
+                    for field, value in action.patch.items():
+                        if hasattr(contact, field):
+                            setattr(contact, field, value)
+                    executed.append({"type": "update_contact", "contact_id": str(contact.id), "patch": action.patch})
+                    results["contact_updated"] = str(contact.id)
     return executed, results
 
 
@@ -349,6 +439,7 @@ def run_automation(
     trigger_matched = flow.trigger.type == event_type
     conditions_matched, condition_results = evaluate_conditions_detailed(flow.conditions, event_payload)
     matched = trigger_matched and conditions_matched
+    matched = flow.trigger.type == event_type and evaluate_conditions(flow.conditions, event_payload)
     actions_executed: list[dict[str, Any]] = []
     results: dict[str, Any] = {}
     error: str | None = None
@@ -373,6 +464,17 @@ def run_automation(
         )
         db.add(run)
         db.flush()
+        db.add(
+            AutomationBuilderRun(
+                user_id=user_id,
+                automation_id=automation.id,
+                event_type=event_type,
+                event_payload=event_payload,
+                matched=matched,
+                actions_executed=actions_executed,
+                error=error,
+            )
+        )
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -400,6 +502,21 @@ def run_automation(
         "run_id": str(run.id),
         "run_created_at": run.created_at.isoformat() if run.created_at else None,
     }
+        db.add(
+            AutomationBuilderRun(
+                user_id=user_id,
+                automation_id=automation.id,
+                event_type=event_type,
+                event_payload=event_payload,
+                matched=matched,
+                actions_executed=actions_executed,
+                error=error,
+            )
+        )
+        db.commit()
+        raise
+
+    return {"matched": matched, "actions_executed": actions_executed, "results": results}
 
 
 def run_enabled_automations(
