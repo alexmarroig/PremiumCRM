@@ -252,6 +252,15 @@ MVP para automações guiadas no backend, sem Activepieces.
 - `DELETE /api/v1/automation-builder/automations/{id}`
 - `POST /api/v1/automation-builder/automations/{id}/test-run`
 
+- `GET /api/v1/automation-builder/automations/catalog`
+
+O endpoint `catalog` expõe contrato dinâmico (triggers/conditions/actions + campos) para um builder visual no frontend.
+
+O `test-run` retorna um diagnóstico mais interativo para facilitar uso no builder:
+- `trigger_matched`: se o trigger bateu com `event_type`
+- `condition_results`: lista ordenada das condições com `passed: true/false`
+- `actions_executed` e `results`: ações efetivamente executadas e retorno consolidado
+
 ### Exemplo cURL: criar automação
 ```bash
 curl -X POST http://localhost:8000/api/v1/automation-builder/automations \
@@ -292,3 +301,17 @@ curl -X POST http://localhost:8000/api/v1/automation-builder/automations/<automa
     }
   }'
 ```
+
+
+### Frontend em Vercel (builder visual estilo n8n)
+Sim, dá para implementar e visualizar o Automation Builder com frontend em Vercel consumindo este backend FastAPI.
+
+Sugestão de arquitetura:
+- Frontend (Next.js/Vercel): editor visual (drag-and-drop) + formulário guiado por `catalog`.
+- Backend (FastAPI): persistência, validação do flow, test-run e execução real por eventos.
+
+Fluxo recomendado para UX "high-tech":
+1. Front chama `GET /api/v1/automation-builder/automations/catalog` para renderizar blocos dinamicamente.
+2. Usuário monta fluxo no editor visual.
+3. Front envia `POST /api/v1/automation-builder/automations` com `flow_json` validado pelo backend.
+4. Front usa `POST /test-run` e mostra `trigger_matched`, `condition_results`, `actions_executed`, `run_id` em painel de diagnóstico ao vivo.

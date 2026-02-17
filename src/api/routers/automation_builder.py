@@ -8,10 +8,17 @@ from services.automation_builder import (
     AutomationBuilderCreate,
     AutomationBuilderPatch,
     AutomationBuilderTestRunInput,
+    get_builder_catalog,
     run_automation,
 )
 
 router = APIRouter(prefix="/automation-builder/automations", tags=["automation-builder"])
+
+
+@router.get("/catalog", response_model=dict)
+def get_catalog(current_user: User = Depends(get_current_user)):
+    _ = current_user
+    return get_builder_catalog()
 
 
 @router.get("", response_model=list[dict])
