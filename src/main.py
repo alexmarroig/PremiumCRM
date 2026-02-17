@@ -14,6 +14,7 @@ from services.automation.scheduler import create_scheduler
 from api.routers import (
     ai,
     automations,
+    automation_builder,
     auth,
     channels,
     contacts,
@@ -111,6 +112,7 @@ api_prefix = "/api/v1"
 app.include_router(auth.router, prefix=api_prefix)
 app.include_router(me.router, prefix=api_prefix)
 app.include_router(automations.router, prefix=api_prefix)
+app.include_router(automation_builder.router, prefix=api_prefix)
 app.include_router(channels.router, prefix=api_prefix)
 app.include_router(conversations.router, prefix=api_prefix)
 app.include_router(messages.router, prefix=api_prefix)

@@ -223,3 +223,95 @@ Há um `docker-compose` auxiliar em `ops/activepieces/docker-compose.yml`. Suba 
 docker-compose -f ops/activepieces/docker-compose.yml up
 ```
 Depois configure um workflow no Activepieces apontando o webhook de entrada para o Alfred, e use o endpoint de callback do Alfred como action HTTP no fluxo.
+
+## Automation Builder (interno, rota B)
+MVP para automações guiadas no backend, sem Activepieces.
+
+### Flow JSON (schema)
+```json
+{
+  "trigger": {"type": "message.ingested"},
+  "conditions": [
+    {"type": "contains_text", "text": "pix"},
+    {"type": "urgency_is", "value": "high"},
+    {"type": "channel_is", "value": "whatsapp"}
+  ],
+  "actions": [
+    {"type": "create_task", "title": "Retornar cliente", "priority": "high"},
+    {"type": "update_conversation_status", "status": "open"},
+    {"type": "add_internal_comment", "text": "Cliente pediu PIX"}
+  ]
+}
+```
+
+### Endpoints
+- `GET /api/v1/automation-builder/automations`
+- `POST /api/v1/automation-builder/automations`
+- `GET /api/v1/automation-builder/automations/{id}`
+- `PATCH /api/v1/automation-builder/automations/{id}`
+- `DELETE /api/v1/automation-builder/automations/{id}`
+- `POST /api/v1/automation-builder/automations/{id}/test-run`
+
+- `GET /api/v1/automation-builder/automations/catalog`
+
+O endpoint `catalog` expõe contrato dinâmico (triggers/conditions/actions + campos) para um builder visual no frontend.
+
+O `test-run` retorna um diagnóstico mais interativo para facilitar uso no builder:
+- `trigger_matched`: se o trigger bateu com `event_type`
+- `condition_results`: lista ordenada das condições com `passed: true/false`
+- `actions_executed` e `results`: ações efetivamente executadas e retorno consolidado
+
+### Exemplo cURL: criar automação
+```bash
+curl -X POST http://localhost:8000/api/v1/automation-builder/automations \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Priorizar urgentes no WhatsApp",
+    "enabled": true,
+    "flow_json": {
+      "trigger": {"type": "message.ingested"},
+      "conditions": [
+        {"type": "contains_text", "text": "urgente"},
+        {"type": "urgency_is", "value": "high"},
+        {"type": "channel_is", "value": "whatsapp"}
+      ],
+      "actions": [
+        {"type": "create_task", "title": "Responder urgente", "priority": "high"},
+        {"type": "update_conversation_status", "status": "open"}
+      ]
+    }
+  }'
+```
+
+### Exemplo cURL: test-run
+```bash
+curl -X POST http://localhost:8000/api/v1/automation-builder/automations/<automation_id>/test-run \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "message.ingested",
+    "event_payload": {
+      "message_id": "msg-123",
+      "conversation_id": "11111111-1111-1111-1111-111111111111",
+      "body": "Isso é urgente",
+      "urgency": "high",
+      "channel": {"type": "whatsapp"},
+      "lead": {"score": 87}
+    }
+  }'
+```
+
+
+### Frontend em Vercel (builder visual estilo n8n)
+Sim, dá para implementar e visualizar o Automation Builder com frontend em Vercel consumindo este backend FastAPI.
+
+Sugestão de arquitetura:
+- Frontend (Next.js/Vercel): editor visual (drag-and-drop) + formulário guiado por `catalog`.
+- Backend (FastAPI): persistência, validação do flow, test-run e execução real por eventos.
+
+Fluxo recomendado para UX "high-tech":
+1. Front chama `GET /api/v1/automation-builder/automations/catalog` para renderizar blocos dinamicamente.
+2. Usuário monta fluxo no editor visual.
+3. Front envia `POST /api/v1/automation-builder/automations` com `flow_json` validado pelo backend.
+4. Front usa `POST /test-run` e mostra `trigger_matched`, `condition_results`, `actions_executed`, `run_id` em painel de diagnóstico ao vivo.

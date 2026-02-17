@@ -162,6 +162,9 @@ class Message(Base):
 
 class Task(Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source_event_id", name="uq_tasks_user_source_event"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         primary_key=True, default=uuid.uuid4, server_default=None
@@ -173,6 +176,7 @@ class Task(Base):
     due_date: Mapped[Optional[date]] = mapped_column(Date)
     status: Mapped[str] = mapped_column(task_status_enum, default="todo", server_default="todo")
     priority: Mapped[str] = mapped_column(task_priority_enum, default="medium", server_default="medium")
+    source_event_id: Mapped[Optional[str]] = mapped_column(String)
 
     user = relationship("User", back_populates="tasks")
     conversation = relationship("Conversation")
@@ -383,6 +387,47 @@ class AutomationCallbackEvent(Base):
 
     destination = relationship("AutomationDestination")
     user = relationship("User")
+
+
+class AutomationBuilderAutomation(Base):
+    __tablename__ = "automation_builder_automations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    trigger_type: Mapped[str] = mapped_column(String, nullable=False)
+    flow_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        default=datetime.utcnow, server_default=func.now(), onupdate=func.now()
+    )
+
+    user = relationship("User")
+
+
+class AutomationBuilderRun(Base):
+    __tablename__ = "automation_builder_runs"
+    __table_args__ = (
+        Index("ix_automation_builder_runs_user_event", "user_id", "event_type"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, default=uuid.uuid4, server_default=None
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    automation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("automation_builder_automations.id"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(String, nullable=False)
+    event_payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    matched: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    actions_executed: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+    error: Mapped[Optional[str]] = mapped_column(Text)
+
+    user = relationship("User")
+    automation = relationship("AutomationBuilderAutomation")
 
 
 # Explicitly define indexes for contacts
