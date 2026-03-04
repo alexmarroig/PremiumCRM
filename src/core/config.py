@@ -23,7 +23,13 @@ class Settings(BaseSettings):
     automation_max_attempts: int = Field(8, alias="AUTOMATION_MAX_ATTEMPTS")
     automation_replay_window_seconds: int = Field(300, alias="AUTOMATION_REPLAY_WINDOW_SECONDS")
     automation_rate_limit_per_minute: int = Field(60, alias="AUTOMATION_RATE_LIMIT_PER_MINUTE")
+    automation_debug_enabled: bool = Field(False, alias="AUTOMATION_DEBUG_ENABLED")
     automation_secret_encryption_key: str = Field("dev-automation-secret", alias="AUTOMATION_SECRET_ENCRYPTION_KEY")
+    cors_origins_raw: str = Field("", alias="CORS_ORIGINS")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [item.strip() for item in self.cors_origins_raw.split(",") if item.strip()]
 
     class Config:
         env_file = ".env"

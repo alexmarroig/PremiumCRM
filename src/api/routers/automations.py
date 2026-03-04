@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -5,23 +6,21 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from api.deps import get_current_user, require_roles
 from core.config import get_settings
-from db.models import AutomationCallbackEvent, AutomationDelivery, AutomationDestination, User
+from db.models import AutomationCallbackEvent, AutomationDestination, User
 from db.session import get_db
 from services.automation.audit import record_automation_audit
 from services.automation.callbacks import execute_action, record_callback_event, validate_callback_request
 from services.automation.signing import (
-    build_signature_base_string,
     build_env_key,
+    build_signature_base_string,
     encrypt_secret,
     ensure_secret_env,
     mask_secret,
     resolve_destination_secret,
-    serialize_callback_body,
     sign_payload,
 )
 
@@ -74,18 +73,6 @@ class CallbackResponse(BaseModel):
     correlation_id: str
 
 
-class DeliveryResponse(BaseModel):
-    id: str
-    destination_id: str
-    destination_name: str
-    event_id: str
-    event_type: str
-    status: str
-    attempts: int
-    last_error: Optional[str] = None
-    next_retry_at: Optional[datetime] = None
-
-
 class DebugSignRequest(BaseModel):
     destination_id: str
     body: dict
@@ -98,51 +85,8 @@ class DebugSignResponse(BaseModel):
     signature_expected: str
 
 
-@router.get("/deliveries", response_model=list[DeliveryResponse])
-def list_deliveries(
-    status_filter: Optional[str] = None,
-    destination_id: Optional[str] = None,
-    event_type: Optional[str] = None,
-    limit: int = 50,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if limit < 1 or limit > 200:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="limit must be between 1 and 200")
-
-    query = (
-        db.query(AutomationDelivery)
-        .join(AutomationDestination, AutomationDestination.id == AutomationDelivery.destination_id)
-        .join(AutomationDelivery.event)
-        .options(
-            joinedload(AutomationDelivery.destination),
-            joinedload(AutomationDelivery.event),
-        )
-        .filter(AutomationDelivery.user_id == current_user.id)
-    )
-
-    if status_filter:
-        query = query.filter(AutomationDelivery.status == status_filter)
-    if destination_id:
-        query = query.filter(AutomationDelivery.destination_id == destination_id)
-    if event_type:
-        query = query.filter(AutomationDelivery.event.has(type=event_type))
-
-    deliveries = query.order_by(AutomationDelivery.id.desc()).limit(limit).all()
-    return [
-        DeliveryResponse(
-            id=str(item.id),
-            destination_id=str(item.destination_id),
-            destination_name=item.destination.name,
-            event_id=str(item.event_id),
-            event_type=item.event.type,
-            status=item.status,
-            attempts=item.attempts,
-            last_error=item.last_error,
-            next_retry_at=item.next_retry_at,
-        )
-        for item in deliveries
-    ]
+def serialize_callback_body(body: dict) -> str:
+    return json.dumps(body, separators=(",", ":"), sort_keys=True)
 
 
 @router.post("/destinations", response_model=DestinationResponse)

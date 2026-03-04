@@ -36,10 +36,12 @@ setup_logging(settings.log_level)
 app = FastAPI(title=settings.app_name, version="1.0.0", openapi_url="/api/v1/openapi.json")
 setup_exception_handlers(app)
 
+cors_origins = settings.cors_origins or ["*"]
+allow_credentials = bool(settings.cors_origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
