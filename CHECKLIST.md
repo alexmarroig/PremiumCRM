@@ -16,12 +16,13 @@
 ## Falta (próximo ciclo)
 - [ ] Migrar criptografia de secret para KMS/Vault gerenciado.
 - [ ] Proteção SSRF em URL de destination (deny private networks).
-- [ ] Endpoint operacional para listar deliveries com filtros.
+- [x] Endpoint operacional para listar deliveries com filtros (`GET /api/v1/automations/deliveries`).
 - [ ] Métricas observáveis (Prometheus / OpenTelemetry).
 
 ## Endpoints novos/atualizados
 - `POST /api/v1/automations/destinations`
 - `GET /api/v1/automations/destinations`
+- `GET /api/v1/automations/deliveries`
 - `PATCH /api/v1/automations/destinations/{destination_id}`
 - `DELETE /api/v1/automations/destinations/{destination_id}`
 - `POST /api/v1/automations/callbacks`

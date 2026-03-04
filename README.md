@@ -107,6 +107,10 @@ O segredo é:
 - mascarado no banco (`secret_masked`)
 - persistido também em formato criptografado (`secret_encrypted`) usando `AUTOMATION_SECRET_ENCRYPTION_KEY`
 
+Endpoint operacional:
+- `GET /api/v1/automations/deliveries?status_filter=pending&event_type=message.sent&limit=50`
+- filtros suportados: `status_filter`, `destination_id`, `event_type`, `limit` (1-200).
+
 ### Debug de assinatura (somente dev/admin)
 Endpoint:
 - `POST /api/v1/automations/debug/sign`
