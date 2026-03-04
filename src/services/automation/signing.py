@@ -103,3 +103,7 @@ def resolve_destination_secret(destination: AutomationDestination) -> Optional[s
     if env_secret:
         return env_secret
     return decrypt_secret(destination.secret_encrypted or "")
+
+
+def serialize_callback_body(body: dict) -> str:
+    return json.dumps(body, separators=(",", ":"), sort_keys=True)
