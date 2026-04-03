@@ -134,6 +134,9 @@ class Conversation(Base):
     last_message_at: Mapped[Optional[datetime]] = mapped_column()
     unread_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     timeline: Mapped[Optional[dict]] = mapped_column(JSONB)
+    context_summary: Mapped[Optional[str]] = mapped_column(Text)
+    personality_analysis: Mapped[Optional[dict]] = mapped_column(JSONB)
+    simulation_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     user = relationship("User", back_populates="conversations")
     contact = relationship("Contact", back_populates="conversations")

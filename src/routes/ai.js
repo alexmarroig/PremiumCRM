@@ -76,4 +76,96 @@ export default async function aiRoutes(fastify) {
     await auditLogger(request);
     return { lead_id: leadId, conversion_probability: score, churn_risk: 100 - score };
   });
+  fastify.post("/api/ai/compress/:conversationId", async (request) => {
+    const { conversationId } = request.params;
+    const { data: conversation, error } = await supabaseAdmin
+      .from("conversations")
+      .select("messages")
+      .eq("id", conversationId)
+      .single();
+    if (error) return { error: error.message };
+
+    const prompt = `${COMPRESSION_PROMPT}\n\n${buildHistory(conversation.messages)}`;
+    const summary = await chatCompletion({
+      messages: [{ role: "system", content: COMPRESSION_PROMPT }, { role: "user", content: prompt }],
+    });
+
+    await supabaseAdmin.from("conversations").update({ context_summary: summary }).eq("id", conversationId);
+    await auditLogger(request);
+    return { context_summary: summary };
+  });
+
+  fastify.post("/api/ai/analyze-personality/:conversationId", async (request) => {
+    const { conversationId } = request.params;
+    const { data: conversation, error } = await supabaseAdmin
+      .from("conversations")
+      .select("messages")
+      .eq("id", conversationId)
+      .single();
+    if (error) return { error: error.message };
+
+    const prompt = `${PERSONALITY_PROMPT}\n\n${buildHistory(conversation.messages)}`;
+    const analysisRaw = await chatCompletion({
+      messages: [{ role: "system", content: PERSONALITY_PROMPT }, { role: "user", content: prompt }],
+    });
+
+    let personalityAnalysis;
+    try {
+      personalityAnalysis = JSON.parse(analysisRaw);
+    } catch (e) {
+      personalityAnalysis = { error: "Failed to parse JSON analysis", raw: analysisRaw };
+    }
+
+    await supabaseAdmin.from("conversations").update({ personality_analysis: personalityAnalysis }).eq("id", conversationId);
+    await auditLogger(request);
+    return { personality_analysis: personalityAnalysis };
+  });
+
+  fastify.post("/api/ai/simulate-conversation/:conversationId", async (request) => {
+    const { conversationId } = request.params;
+    const { data: conversation, error } = await supabaseAdmin
+      .from("conversations")
+      .select("messages, personality_analysis")
+      .eq("id", conversationId)
+      .single();
+    if (error) return { error: error.message };
+
+    const history = buildHistory(conversation.messages);
+    const personality = JSON.stringify(conversation.personality_analysis || {});
+    const prompt = SIMULATION_PROMPT.replace("{{personality}}", personality).replace("{{history}}", history);
+
+    const simulationRaw = await chatCompletion({
+      messages: [{ role: "system", content: SIMULATION_PROMPT }, { role: "user", content: prompt }],
+    });
+
+    let simulation;
+    try {
+      simulation = JSON.parse(simulationRaw);
+    } catch (e) {
+      simulation = { error: "Failed to parse simulation JSON", raw: simulationRaw };
+    }
+
+    await auditLogger(request);
+    return simulation;
+  });
+
+  fastify.post("/api/ai/simulation-toggle/:conversationId", async (request) => {
+    const { conversationId } = request.params;
+    const { enabled } = request.body || {};
+    const { error } = await supabaseAdmin
+      .from("conversations")
+      .update({ simulation_enabled: !!enabled })
+      .eq("id", conversationId);
+    if (error) return { error: error.message };
+    return { status: "ok", simulation_enabled: !!enabled };
+  });
+
+  fastify.post("/api/ai/voice/call-lead/:leadId", async (request) => {
+    const { leadId } = request.params;
+    const { userId } = request.body || {};
+    const result = await triggerVoiceAgentCall(leadId, userId || request.user.id);
+    await auditLogger(request);
+    return result;
+  });
+
 }
