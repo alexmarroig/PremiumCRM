@@ -1,8 +1,9 @@
-import { chatCompletion, textToSpeech } from '../../ai/openai.js';
+import fetch from 'node-fetch';
+import { config } from '../../utils/config.js';
 import { supabaseAdmin } from '../../utils/supabase.js';
 
 export const triggerVoiceAgentCall = async (leadId, userId) => {
-  // Fetch lead and latest conversation
+  // Busca o lead e o histórico de conversas
   const { data: lead } = await supabaseAdmin.from('contacts').select('*').eq('id', leadId).single();
   const { data: conversation } = await supabaseAdmin
     .from('conversations')
@@ -16,30 +17,66 @@ export const triggerVoiceAgentCall = async (leadId, userId) => {
   const summary = conversation?.context_summary || 'Sem resumo.';
 
   const systemPrompt = `
-    Você é um agente de voz especializado em vendas e agendamento.
+    Você é um agente de voz especializado em vendas e agendamento para a empresa Clarity CRM.
     Seu objetivo: Ligar para o Lead e tentar agendar uma reunião ou fechar uma venda.
-    Contexto do Lead: ${lead?.name || 'Cliente'}
+    Contexto do Lead: ${lead?.name || 'Cliente'} (Telefone: ${lead?.handle || 'Desconhecido'})
     Histórico de Chat: ${history}
     Resumo da Negociação: ${summary}
-    Instruções: Seja cordial, direto e use um tom profissional.
+    Instruções: Seja cordial, direto e use um tom profissional e amigável. Fale em Português do Brasil.
   `;
 
-  // Simulate starting the call and getting the first sentence
-  const firstSentence = await chatCompletion({
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: 'Inicie a ligação saudando o cliente.' }
-    ]
-  });
+  if (!config.vapiApiKey) {
+    return {
+      error: 'VAPI_API_KEY não configurada no .env',
+      status: 'simulation',
+      message: 'A IA está pronta para ligar, mas você precisa adicionar VAPI_API_KEY no seu arquivo .env.'
+    };
+  }
 
-  // Convert to audio (simulating voice output)
-  const audioBase64 = await textToSpeech(firstSentence);
+  try {
+    const response = await fetch('https://api.vapi.ai/call', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.vapiApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        phoneNumberId: config.vapiPhoneNumberId,
+        customer: {
+          number: lead?.handle.startsWith('+') ? lead.handle : `+55${lead.handle.replace(/\D/g, '')}`,
+          name: lead?.name
+        },
+        assistant: {
+          name: 'Clarity AI Sales',
+          firstMessage: `Olá ${lead?.name || 'tudo bem'}? Aqui é a inteligência artificial da Clarity. Vi que estávamos conversando por chat e resolvi te ligar para agilizarmos.`,
+          model: {
+            provider: 'openai',
+            model: 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemPrompt }
+            ]
+          },
+          voice: {
+             provider: '11labs',
+             voiceId: 'lucas' // Ou qualquer voz em PT-BR
+          }
+        }
+      })
+    });
 
-  return {
-    call_id: `call_${Date.now()}`,
-    status: 'calling',
-    first_sentence: firstSentence,
-    audio_payload: audioBase64,
-    provider: 'openai-voice-simulation'
-  };
+    const data = await response.json();
+    if (!response.ok) throw new Error(JSON.stringify(data));
+
+    return {
+      call_id: data.id,
+      status: data.status,
+      provider: 'vapi',
+      data
+    };
+  } catch (error) {
+    return {
+      error: error.message,
+      status: 'failed'
+    };
+  }
 };
