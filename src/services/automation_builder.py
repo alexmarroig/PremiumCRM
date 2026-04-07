@@ -256,7 +256,6 @@ def _extract_lead_score(event_payload: dict[str, Any]) -> float | None:
 def evaluate_conditions_detailed(
     conditions: list[ConditionType], event_payload: dict[str, Any]
 ) -> tuple[bool, list[dict[str, Any]]]:
-def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str, Any]) -> bool:
     message_text = str(event_payload.get("message", {}).get("text") or event_payload.get("body") or "")
     urgency = event_payload.get("urgency")
     if urgency is None:
@@ -288,20 +287,7 @@ def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str
     return True, details
 
 
-def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str, Any]) -> bool:
-    matched, _ = evaluate_conditions_detailed(conditions, event_payload)
-    return matched
 
-    for condition in conditions:
-        if condition.type == "contains_text" and condition.text.lower() not in message_text.lower():
-            return False
-        if condition.type == "urgency_is" and urgency != condition.value:
-            return False
-        if condition.type == "lead_score_gte" and (lead_score is None or lead_score < condition.value):
-            return False
-        if condition.type == "channel_is" and channel_type != condition.value:
-            return False
-    return True
 
 
 def _resolve_conversation_id(action: ActionType, event_payload: dict[str, Any]) -> UUID | None:
@@ -502,21 +488,6 @@ def run_automation(
         "run_id": str(run.id),
         "run_created_at": run.created_at.isoformat() if run.created_at else None,
     }
-        db.add(
-            AutomationBuilderRun(
-                user_id=user_id,
-                automation_id=automation.id,
-                event_type=event_type,
-                event_payload=event_payload,
-                matched=matched,
-                actions_executed=actions_executed,
-                error=error,
-            )
-        )
-        db.commit()
-        raise
-
-    return {"matched": matched, "actions_executed": actions_executed, "results": results}
 
 
 def run_enabled_automations(
@@ -548,3 +519,7 @@ def run_enabled_automations(
             )
         )
     return outputs
+
+def evaluate_conditions(conditions: list[ConditionType], event_payload: dict[str, Any]) -> bool:
+    matched, _ = evaluate_conditions_detailed(conditions, event_payload)
+    return matched
